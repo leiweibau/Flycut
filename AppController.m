@@ -13,6 +13,7 @@
 // interface and platform-specific mechanisms.
 
 #import "AppController.h"
+#import "FlycutLocalization.h"
 #import "SGHotKey.h"
 #import "SGHotKeyCenter.h"
 #import "SRRecorderCell.h"
@@ -22,6 +23,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <ServiceManagement/ServiceManagement.h>
+#import "Flycut-Swift.h"
 
 // Custom search window that handles Cmd-W properly
 @interface SearchWindow : NSWindow
@@ -53,7 +55,30 @@
 
 @end
 
+@interface AppController () <FlycutSearchWindowControllerDelegate, FlycutPreferencesWindowControllerDelegate, FlycutStatusPopoverControllerDelegate>
+
+- (void)applyLocalization;
+- (void)localizeMenu:(NSMenu *)menu;
+- (void)localizeMenuItem:(NSMenuItem *)item;
+- (void)localizeView:(NSView *)view;
+- (void)localizeWindow:(NSWindow *)window;
+- (NSArray<NSDictionary *> *)displayItemsMatchingSearch:(NSString *)search;
+- (NSImage *)previewImageForClipping:(FlycutClipping *)clipping size:(CGFloat)size;
+- (void)addClippingToPasteboard:(FlycutClipping *)clipping;
+- (void)toggleStatusPopover:(id)sender;
+- (void)presentSaveLocationPanelForAutoSave:(BOOL)autoSave;
+- (void)prewarmStatusPopoverIfNeeded;
+@property (nonatomic, retain) FlycutSearchWindowController *swiftSearchWindowController;
+@property (nonatomic, retain) FlycutPreferencesWindowController *swiftPreferencesWindowController;
+@property (nonatomic, retain) FlycutStatusPopoverController *statusPopoverController;
+
+@end
+
 @implementation AppController
+
+@synthesize swiftSearchWindowController = _swiftSearchWindowController;
+@synthesize swiftPreferencesWindowController = _swiftPreferencesWindowController;
+@synthesize statusPopoverController = _statusPopoverController;
 
 
 - (id)init
@@ -120,7 +145,7 @@
                         ];
 	[settingsSyncList retain];
 
-	menuQueue = dispatch_queue_create(@"com.Flycut.menuUpdateQueue", DISPATCH_QUEUE_SERIAL);
+	menuQueue = dispatch_queue_create("com.Flycut.menuUpdateQueue", DISPATCH_QUEUE_SERIAL);
 
 	// Initialize search window pointers to nil
 	searchWindow = nil;
@@ -196,10 +221,10 @@
     
     if (!suppressAlert && &AXIsProcessTrustedWithOptions != NULL && !trusted) {
         NSAlert *alert = [[NSAlert alloc] init];
-        [alert setMessageText:@"Flycut"];
-        [alert setInformativeText:@"For correct functioning of the app please tick Flycut in Accessibility apps list.\n\nIf Flycut is already listed but paste doesn't work, remove it from the list, then add it again and restart Flycut."];
-        [alert addButtonWithTitle:@"Open Settings"];
-        [alert addButtonWithTitle:@"Request System Prompt"];
+        [alert setMessageText:FCLocalizedString(@"Flycut")];
+        [alert setInformativeText:FCLocalizedString(@"For correct functioning of the app please tick Flycut in Accessibility apps list.\n\nIf Flycut is already listed but paste doesn't work, remove it from the list, then add it again and restart Flycut.")];
+        [alert addButtonWithTitle:FCLocalizedString(@"Open Settings")];
+        [alert addButtonWithTitle:FCLocalizedString(@"Request System Prompt")];
         alert.showsSuppressionButton = YES;
         NSModalResponse response = [alert runModal];
         
@@ -274,6 +299,7 @@
 	NSLog(@"[Flycut Startup] Initial Accessibility Trust State: %@", initialTrustState ? @"TRUSTED" : @"NOT TRUSTED");
 	
 	[self buildAppearancesPreferencePanel];
+    [self applyLocalization];
 
 	// We no longer get autosave from ShortcutRecorder, so let's set the recorder by hand
 	if ( [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"ShortcutRecorder mainHotkey"] ) {
@@ -306,7 +332,9 @@
 
 	// Set up the bezel date formatter
 	dateFormat = [[NSDateFormatter alloc] init];
-	[dateFormat setDateFormat:@"EEEE, MMMM dd 'at' h:mm a"];
+    dateFormat.locale = [NSLocale autoupdatingCurrentLocale];
+    dateFormat.dateStyle = NSDateFormatterFullStyle;
+    dateFormat.timeStyle = NSDateFormatterShortStyle;
 
 	// Create our pasteboard interface
     jcPasteboard = [NSPasteboard generalPasteboard];
@@ -318,10 +346,13 @@
             statusItemWithLength:NSVariableStatusItemLength] retain];
     [statusItem setHighlightMode:YES];
     [self switchMenuIconTo: [[NSUserDefaults standardUserDefaults] integerForKey:@"menuIcon"]];
-	[statusItem setMenu:jcMenu];
+	[statusItem setMenu:nil];
+    [statusItem.button setTarget:self];
+    [statusItem.button setAction:@selector(toggleStatusPopover:)];
     [jcMenu setDelegate:self];
     jcMenuBaseItemsCount = [[[[jcMenu itemArray] reverseObjectEnumerator] allObjects] count];
     [statusItem setEnabled:YES];
+    [self performSelector:@selector(prewarmStatusPopoverIfNeeded) withObject:nil afterDelay:0.0];
 
     // If our preferences indicate that we are saving, we may have loaded the dictionary from the
     // saved plist and should update the menu.
@@ -394,6 +425,34 @@
     // Menu closed - no special handling needed now that we removed search box activation
 }
 
+-(void)toggleStatusPopover:(id)sender
+{
+    NSEvent *event = [NSApp currentEvent];
+    if ([event modifierFlags] & NSEventModifierFlagOption) {
+        bool disableStore = [self toggleMenuIconDisabled];
+        if (!disableStore) {
+            [pbCount release];
+            pbCount = [[NSNumber numberWithInt:[jcPasteboard changeCount]] retain];
+        }
+        [flycutOperator setDisableStoreTo:disableStore];
+        [self.statusPopoverController closePopover];
+        return;
+    }
+
+    if (!self.statusPopoverController) {
+        self.statusPopoverController = [[[FlycutStatusPopoverController alloc] init] autorelease];
+        self.statusPopoverController.bridgeDelegate = self;
+    }
+
+    [self updateMenu];
+
+    NSStatusBarButton *button = statusItem.button;
+    if (button) {
+        [self.statusPopoverController toggleWithRelativeTo:button.bounds of:button];
+        button.state = self.statusPopoverController.isShown ? NSControlStateValueOn : NSControlStateValueOff;
+    }
+}
+
 -(bool)toggleMenuIconDisabled
 {
     // Toggles the "disabled" look of the menu icon.  Returns if the icon looks disabled or not, allowing the caller to decide if anything is actually being disabled or if they just wanted the icon to be a status display.
@@ -413,6 +472,16 @@
         statusItemImage = nil;
     }
     return false;
+}
+
+- (void)prewarmStatusPopoverIfNeeded
+{
+    if (self.statusPopoverController)
+        return;
+
+    self.statusPopoverController = [[[FlycutStatusPopoverController alloc] init] autorelease];
+    self.statusPopoverController.bridgeDelegate = self;
+    [self updateMenuContaining:nil];
 }
 
 - (void)reopenMenu
@@ -545,6 +614,8 @@
 			}
 		}
 	}
+
+	return setRemember;
 }
 
 -(IBAction) setFavoritesRememberNumPref:(id)sender
@@ -699,10 +770,10 @@
 	NSRect screenFrame = [[NSScreen mainScreen] frame];
 
 	int nextYMax = -1;
-	NSView *row = [self preferencePanelSliderRowForText:@"Bezel transparency"
+	NSView *row = [self preferencePanelSliderRowForText:FCLocalizedString(@"Bezel transparency")
 											 withTicks:16
-											   minText:@"Lighter"
-											   maxText:@"Darker"
+											   minText:FCLocalizedString(@"Lighter")
+											   maxText:FCLocalizedString(@"Darker")
 											  minValue:0.1
 											  maxValue:0.9
 											 frameMaxY:nextYMax
@@ -711,10 +782,10 @@
 	[appearancePanel addSubview:row];
 	nextYMax = row.frame.origin.y;
 
-	row = [self preferencePanelSliderRowForText:@"Bezel width"
+	row = [self preferencePanelSliderRowForText:FCLocalizedString(@"Bezel width")
 									  withTicks:50
-										minText:@"Smaller"
-										maxText:@"Bigger"
+										minText:FCLocalizedString(@"Smaller")
+										maxText:FCLocalizedString(@"Bigger")
 									   minValue:200
 									   maxValue:screenFrame.size.width
 									  frameMaxY:nextYMax
@@ -723,10 +794,10 @@
 	[appearancePanel addSubview:row];
 	nextYMax = row.frame.origin.y;
 
-	row = [self preferencePanelSliderRowForText:@"Bezel height"
+	row = [self preferencePanelSliderRowForText:FCLocalizedString(@"Bezel height")
 									  withTicks:50
-										minText:@"Smaller"
-										maxText:@"Bigger"
+										minText:FCLocalizedString(@"Smaller")
+										maxText:FCLocalizedString(@"Bigger")
 									   minValue:200
 									   maxValue:screenFrame.size.height
 									  frameMaxY:nextYMax
@@ -735,12 +806,12 @@
 	[appearancePanel addSubview:row];
 	nextYMax = row.frame.origin.y;
 
-	row = [self preferencePanelPopUpRowForText:@"Menu item icon"
+	row = [self preferencePanelPopUpRowForText:FCLocalizedString(@"Menu item icon")
 										 items:[NSArray arrayWithObjects:
-												@"Flycut icon",
-												@"Black Flycut icon",
-												@"White scissors",
-												@"Black scissors",nil]
+												FCLocalizedString(@"Flycut icon"),
+												FCLocalizedString(@"Black Flycut icon"),
+												FCLocalizedString(@"White scissors"),
+												FCLocalizedString(@"Black scissors"),nil]
 									 frameMaxY:nextYMax
 									   binding:@"menuIcon"
 										action:@selector(switchMenuIcon:)];
@@ -748,7 +819,7 @@
 	nextYMax = row.frame.origin.y;
 
 	// Add search hotkey recorder - moved up for better visibility
-	row = [self preferencePanelHotkeyRowForText:@"Search clipboard hotkey:" recorder:&searchRecorder frameMaxY:nextYMax];
+	row = [self preferencePanelHotkeyRowForText:FCLocalizedString(@"Search clipboard hotkey:") recorder:&searchRecorder frameMaxY:nextYMax];
 	[appearancePanel addSubview:row];
 	nextYMax = row.frame.origin.y;
 
@@ -759,10 +830,10 @@
 //	[appearancePanel addSubview:row];
 //	nextYMax = row.frame.origin.y;
 
-    row = [self preferencePanelCheckboxRowForText:@"Show clipping source app and time"
+    row = [self preferencePanelCheckboxRowForText:FCLocalizedString(@"Show clipping source app and time")
                                         frameMaxY:nextYMax
                                           binding:@"displayClippingSource"
-                                           action:@selector(setupBezel:)];
+                                          action:@selector(setupBezel:)];
     [appearancePanel addSubview:row];
     nextYMax = row.frame.origin.y;
     
@@ -774,7 +845,7 @@
     [accessibilityRow setTransparent:YES];
     
     NSButton *accessibilityButton = [[NSButton alloc] initWithFrame:NSMakeRect(8, 4, 250, 25)];
-    [accessibilityButton setTitle:@"Check Accessibility Permissions"];
+    [accessibilityButton setTitle:FCLocalizedString(@"Check Accessibility Permissions")];
     [accessibilityButton setButtonType:NSButtonTypeMomentaryPushIn];
     [accessibilityButton setBezelStyle:NSBezelStyleRounded];
     [accessibilityButton setTarget:self];
@@ -790,33 +861,11 @@
 {
     [currentRunningApplication release];
     currentRunningApplication = nil; // So it doesn't get pulled foreground atop the preference panel.
-	if ([prefsPanel respondsToSelector:@selector(setCollectionBehavior:)])
-		[prefsPanel setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces];
-	[NSApp activateIgnoringOtherApps: YES];
-
-    // Set minimum width but let UKPrefsPanel control the height based on tab content
-    NSRect currentFrame = [prefsPanel frame];
-    if (currentFrame.size.width < 700) {
-        NSRect newFrame = currentFrame;
-        newFrame.size.width = 720;
-        // Adjust position to keep window centered horizontally
-        newFrame.origin.x = currentFrame.origin.x - (newFrame.size.width - currentFrame.size.width) / 2;
-        [prefsPanel setFrame:newFrame display:NO animate:NO];
+    if (!self.swiftPreferencesWindowController) {
+        self.swiftPreferencesWindowController = [[[FlycutPreferencesWindowController alloc] init] autorelease];
+        self.swiftPreferencesWindowController.bridgeDelegate = self;
     }
-	[prefsPanel makeKeyAndOrderFront:self];
-	NSString *fileRoot = [[NSBundle mainBundle] pathForResource:@"acknowledgements" ofType:@"txt"];
-	NSString *contents = [NSString stringWithContentsOfFile:fileRoot
-												   encoding:NSUTF8StringEncoding
-													  error:NULL];
-	[acknowledgementsView setString:contents];
-	NSURL* saveToLocation = [[NSUserDefaults standardUserDefaults] URLForKey:@"saveToLocation"];
-	if (saveToLocation) {
-		[saveToLocationButton setTitle:[saveToLocation lastPathComponent]];
-	}
-	NSURL* autoSaveToLocation = [[NSUserDefaults standardUserDefaults] URLForKey:@"autoSaveToLocation"];
-	if (autoSaveToLocation) {
-		[autoSaveToLocationButton setTitle:[autoSaveToLocation lastPathComponent]];
-	}
+    [self.swiftPreferencesWindowController showAndFocus];
 	[flycutOperator willShowPreferences];
 }
 
@@ -847,18 +896,18 @@
     
     if (trusted) {
         NSAlert *alert = [[NSAlert alloc] init];
-        alert.messageText = @"Accessibility Access Granted";
-        alert.informativeText = [NSString stringWithFormat:@"Flycut has accessibility permissions.\n\nBundle: %@\nBundle ID: %@", bundlePath, bundleID];
-        [alert addButtonWithTitle:@"OK"];
+        alert.messageText = FCLocalizedString(@"Accessibility Access Granted");
+        alert.informativeText = [NSString stringWithFormat:FCLocalizedString(@"Flycut has accessibility permissions.\n\nBundle: %@\nBundle ID: %@"), bundlePath, bundleID];
+        [alert addButtonWithTitle:FCLocalizedString(@"OK")];
         [alert runModal];
         [alert release];
     } else {
         NSAlert *alert = [[NSAlert alloc] init];
-        alert.messageText = @"Accessibility Access Required";
-        alert.informativeText = [NSString stringWithFormat:@"Flycut does not have accessibility permissions.\n\nBundle: %@\nBundle ID: %@\n\nYou can request the system prompt or open Settings to grant access manually.", bundlePath, bundleID];
-        [alert addButtonWithTitle:@"Request System Prompt"];
-        [alert addButtonWithTitle:@"Open Settings"];
-        [alert addButtonWithTitle:@"Cancel"];
+        alert.messageText = FCLocalizedString(@"Accessibility Access Required");
+        alert.informativeText = [NSString stringWithFormat:FCLocalizedString(@"Flycut does not have accessibility permissions.\n\nBundle: %@\nBundle ID: %@\n\nYou can request the system prompt or open Settings to grant access manually."), bundlePath, bundleID];
+        [alert addButtonWithTitle:FCLocalizedString(@"Request System Prompt")];
+        [alert addButtonWithTitle:FCLocalizedString(@"Open Settings")];
+        [alert addButtonWithTitle:FCLocalizedString(@"Cancel")];
         NSModalResponse response = [alert runModal];
         [alert release];
         
@@ -883,10 +932,11 @@
 - (void)pasteFromStack
 {
 	NSLog(@"pasteFromStack called");
-	NSString *content = [flycutOperator getPasteFromStackPosition];
-	if ( nil != content ) {
-		NSLog(@"Content found, adding to pasteboard and preparing to paste: %@", [content substringToIndex:MIN(content.length, 50)]);
-		[self addClipToPasteboard:content];
+	FlycutClipping *clipping = [flycutOperator clippingAtStackPosition];
+	if ( nil != clipping ) {
+        NSString *logLabel = [clipping isImage] ? FCLocalizedString(@"Image") : [clipping contents];
+		NSLog(@"Content found, adding to pasteboard and preparing to paste: %@", [logLabel substringToIndex:MIN(logLabel.length, 50)]);
+		[self addClippingToPasteboard:clipping];
 		[self performSelector:@selector(hideApp) withObject:nil afterDelay:0.2];
 		[self performSelector:@selector(fakeCommandV) withObject:nil afterDelay:0.5];
 	} else {
@@ -915,10 +965,11 @@
         position = [mapping[position] intValue];
     }
 
+    FlycutClipping *clipping = [flycutOperator getClippingFromIndex:position];
     NSString *content = [flycutOperator getPasteFromIndex: position];
-    if ( nil != content )
+    if ( nil != clipping && (nil != content || [clipping isImage]) )
     {
-        [self addClipToPasteboard:content];
+        [self addClippingToPasteboard:clipping];
         [self updateMenu];
 	}
 }
@@ -972,10 +1023,10 @@
         
         dispatch_async(dispatch_get_main_queue(), ^{
             NSAlert *alert = [[NSAlert alloc] init];
-            alert.messageText = @"Accessibility Access Required";
-            alert.informativeText = @"Flycut needs accessibility access to paste.\n\nIf you already granted permission, try removing Flycut from the Accessibility list, adding it again, and restarting the app.";
-            [alert addButtonWithTitle:@"Open Settings"];
-            [alert addButtonWithTitle:@"Cancel"];
+            alert.messageText = FCLocalizedString(@"Accessibility Access Required");
+            alert.informativeText = FCLocalizedString(@"Flycut needs accessibility access to paste.\n\nIf you already granted permission, try removing Flycut from the Accessibility list, adding it again, and restarting the app.");
+            [alert addButtonWithTitle:FCLocalizedString(@"Open Settings")];
+            [alert addButtonWithTitle:FCLocalizedString(@"Cancel")];
             NSModalResponse response = [alert runModal];
             [alert release];
             if (response == NSAlertFirstButtonReturn) {
@@ -1066,13 +1117,14 @@
 
 -(void)pollPB:(NSTimer *)timer
 {
-    NSString *type = [jcPasteboard availableTypeFromArray:[NSArray arrayWithObject:NSPasteboardTypeString]];
+    NSString *textType = [jcPasteboard availableTypeFromArray:@[NSPasteboardTypeString]];
+    NSString *imageType = [jcPasteboard availableTypeFromArray:@[NSPasteboardTypePNG, NSPasteboardTypeTIFF]];
     if ( [pbCount intValue] != [jcPasteboard changeCount] && ![flycutOperator storeDisabled] ) {
         // Reload pbCount with the current changeCount
         // Probably poor coding technique, but pollPB should be the only thing messing with pbCount, so it should be okay
         [pbCount release];
         pbCount = [[NSNumber numberWithInt:[jcPasteboard changeCount]] retain];
-        if ( type != nil ) {
+        if ( textType != nil || imageType != nil ) {
 			NSRunningApplication *currRunningApp = nil;
 			for (NSRunningApplication *currApp in [[NSWorkspace sharedWorkspace] runningApplications])
 				if ([currApp isActive])
@@ -1084,17 +1136,29 @@
 				[self toggleMenuIconDisabled];
 
 			// In case we need to do a status visual, this will be dispatched out so our thread isn't blocked.
-			dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+			dispatch_queue_t queue = dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0);
 			dispatch_async(queue, ^{
 
 				// This operation blocks until the transfer is complete, though it was was here before the RDC issue was discovered.  Convenient.
-                NSString *contents = [jcPasteboard stringForType:type];
+                NSString *contents = textType ? [jcPasteboard stringForType:textType] : nil;
+                NSData *imageData = imageType ? [jcPasteboard dataForType:imageType] : nil;
 
 				// Toggle back if dealing with the RDC issue.
 				if (largeCopyRisk)
 					[self toggleMenuIconDisabled];
 
-                if ( contents == nil || [flycutOperator shouldSkip:contents ofType:[jcPasteboard availableTypeFromArray:[NSArray arrayWithObject:NSPasteboardTypeString]] fromAvailableTypes:[jcPasteboard types]] ) {
+                if ( imageData.length > 0 ) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if ( ! [pbCount isEqualTo:pbBlockCount] ) {
+                            [flycutOperator addImageClippingData:imageData
+                                                          ofType:imageType
+                                                         fromApp:[currRunningApp localizedName]
+                                                  withAppBundleURL:currRunningApp.bundleURL.path
+                                                           target:self
+                                           clippingAddedSelector:@selector(updateMenu)];
+                        }
+                    });
+                } else if ( contents == nil || [flycutOperator shouldSkip:contents ofType:[jcPasteboard availableTypeFromArray:@[NSPasteboardTypeString]] fromAvailableTypes:[jcPasteboard types]] ) {
                    DLog(@"Contents: Empty or skipped");
                } else {
                    // Dispatch back to main queue to safely modify the clipping store and update UI.
@@ -1102,7 +1166,7 @@
                    // background queue and the main thread (e.g. showing the bezel) causes crashes.
                    dispatch_async(dispatch_get_main_queue(), ^{
                        if ( ! [pbCount isEqualTo:pbBlockCount] ) {
-                           [flycutOperator addClipping:contents ofType:type fromApp:[currRunningApp localizedName] withAppBundleURL:currRunningApp.bundleURL.path target:self clippingAddedSelector:@selector(updateMenu)];
+                           [flycutOperator addClipping:contents ofType:textType fromApp:[currRunningApp localizedName] withAppBundleURL:currRunningApp.bundleURL.path target:self clippingAddedSelector:@selector(updateMenu)];
                        }
                    });
                }
@@ -1219,8 +1283,8 @@
                 break;
             case ' ':
                 isBezelPinned = YES;
-                [bezel setCharString:[NSString stringWithFormat:@"%d of %d (pinned)",
-                    [flycutOperator stackPosition] + 1, [flycutOperator jcListCount]]];
+                [bezel setCharString:[NSString stringWithFormat:FCLocalizedString(@"%d of %d (%@)"),
+                    [flycutOperator stackPosition] + 1, [flycutOperator jcListCount], FCLocalizedString(@"pinned")]];
                 break;
             default: // It's not a navigation/application-defined thing, so let's figure out what to do with it.
 				DLog(@"PRESSED %d", pressed);
@@ -1241,8 +1305,8 @@
         [self pasteFromStack];
     } else if (theEvent.type == NSEventTypeRightMouseUp) {
         isBezelPinned = YES;
-        [bezel setCharString:[NSString stringWithFormat:@"%d of %d (pinned)",
-            [flycutOperator stackPosition] + 1, [flycutOperator jcListCount]]];
+        [bezel setCharString:[NSString stringWithFormat:FCLocalizedString(@"%d of %d (%@)"),
+            [flycutOperator stackPosition] + 1, [flycutOperator jcListCount], FCLocalizedString(@"pinned")]];
     }
 }
 
@@ -1281,11 +1345,12 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 	[flycutOperator adjustStackPositionIfOutOfBounds];
 	if ([flycutOperator jcListCount] == 0) { // empty
 		[bezel setText:@""];
-		[bezel setCharString:@"Empty"];
-        [bezel setSource:@""];
-        [bezel setDate:@""];
-        [bezel setSourceIcon:nil];
-	}
+		[bezel setCharString:FCLocalizedString(@"Empty")];
+	        [bezel setSource:@""];
+	        [bezel setDate:@""];
+	        [bezel setSourceIcon:nil];
+            [bezel setPreviewImage:nil];
+		}
 	else { // normal
 		[self fillBezel];
 	}
@@ -1313,7 +1378,8 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 - (void) hideBezel
 {
 	[bezel orderOut:nil];
-	[bezel setCharString:@"Empty"];
+	[bezel setCharString:FCLocalizedString(@"Empty")];
+    [bezel setPreviewImage:nil];
 	isBezelDisplayed = NO;
 }
 
@@ -1356,7 +1422,7 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 	mainHotKey = [[SGHotKey alloc] initWithIdentifier:@"mainHotKey"
 											   keyCombo:[SGKeyCombo keyComboWithKeyCode:[mainRecorder keyCombo].code
 																			  modifiers:[mainRecorder cocoaToCarbonFlags: [mainRecorder keyCombo].flags]]];
-	[mainHotKey setName: @"Activate Flycut HotKey"]; //This is typically used by PTKeyComboPanel
+	[mainHotKey setName:FCLocalizedString(@"Activate Flycut HotKey")]; //This is typically used by PTKeyComboPanel
 	[mainHotKey setTarget: self];
 	[mainHotKey setAction: @selector(hitMainHotKey:)];
 	[[SGHotKeyCenter sharedCenter] registerHotKey:mainHotKey];
@@ -1366,10 +1432,10 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 {
 	if ( [[NSUserDefaults standardUserDefaults] boolForKey:@"syncSettingsViaICloud"] ) {
 		NSAlert *alert = [[NSAlert alloc] init];
-		[alert setMessageText:@"Warning"];
-		[alert addButtonWithTitle:@"Ok"];
-		[alert addButtonWithTitle:@"Cancel"];
-		[alert setInformativeText:@"Enabling iCloud Settings Sync will overwrite local settings if your iCloud account already has Flycut settings.  If you have never enabled this in Flycut on any computer, your current settings will be retained and loaded into iCloud."];
+		[alert setMessageText:FCLocalizedString(@"Warning")];
+		[alert addButtonWithTitle:FCLocalizedString(@"OK")];
+		[alert addButtonWithTitle:FCLocalizedString(@"Cancel")];
+		[alert setInformativeText:FCLocalizedString(@"Enabling iCloud Settings Sync will overwrite local settings if your iCloud account already has Flycut settings. If you have never enabled this in Flycut on any computer, your current settings will be retained and uploaded to iCloud.")];
 		if ( [alert runModal] != NSAlertFirstButtonReturn )
 		{
 			[[NSUserDefaults standardUserDefaults] setValue:[NSNumber numberWithBool:NO]
@@ -1386,10 +1452,10 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 		if ( [[NSUserDefaults standardUserDefaults] integerForKey:@"savePreference"] < 2 ) {
 			// Must set syncClippingsViaICloud = 2
 			NSAlert *alert = [[NSAlert alloc] init];
-			[alert setMessageText:@"Settings Change"];
-			[alert addButtonWithTitle:@"Ok"];
-			[alert addButtonWithTitle:@"Cancel"];
-			[alert setInformativeText:@"iCloud Clippings Sync will set 'Save: After each clip'."];
+			[alert setMessageText:FCLocalizedString(@"Settings Change")];
+			[alert addButtonWithTitle:FCLocalizedString(@"OK")];
+			[alert addButtonWithTitle:FCLocalizedString(@"Cancel")];
+			[alert setInformativeText:FCLocalizedString(@"iCloud Clippings Sync will set 'Save: After each clip'.")];
 			if ( [alert runModal] == NSAlertFirstButtonReturn )
 			{
 				[[NSUserDefaults standardUserDefaults] setValue:[NSNumber numberWithInt:2]
@@ -1411,10 +1477,10 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 		if ( [[NSUserDefaults standardUserDefaults] boolForKey:@"syncClippingsViaICloud"] ) {
 			// Must disable syncClippingsViaICloud
 			NSAlert *alert = [[NSAlert alloc] init];
-			[alert setMessageText:@"Settings Change"];
-			[alert addButtonWithTitle:@"Ok"];
-			[alert addButtonWithTitle:@"Cancel"];
-			[alert setInformativeText:@"Disabling 'Save: After each clip' will disable iCloud Clippings Sync."];
+			[alert setMessageText:FCLocalizedString(@"Settings Change")];
+			[alert addButtonWithTitle:FCLocalizedString(@"OK")];
+			[alert addButtonWithTitle:FCLocalizedString(@"Cancel")];
+			[alert setInformativeText:FCLocalizedString(@"Disabling 'Save: After each clip' will disable iCloud Clippings Sync.")];
 
 			if ( [alert runModal] == NSAlertFirstButtonReturn )
 			{
@@ -1430,28 +1496,34 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 }
 
 - (IBAction)selectSaveLocation:(id)sender {
-	// Create and configure the panel.
+    [self presentSaveLocationPanelForAutoSave:(sender == autoSaveToLocationButton)];
+}
+
+- (void)presentSaveLocationPanelForAutoSave:(BOOL)autoSave
+{
+    NSWindow *parentWindow = self.swiftPreferencesWindowController.window ?: prefsPanel;
 	NSOpenPanel* panel = [NSOpenPanel openPanel];
 	[panel setCanChooseFiles:NO];
 	[panel setCanChooseDirectories:YES];
 	[panel setCanCreateDirectories:YES];
 	[panel setAllowsMultipleSelection:NO];
-	[panel setMessage:@"Select a directory."];
+	[panel setMessage:FCLocalizedString(@"Select a directory.")];
 
-	// Display the panel attached to the document's window.
-	[panel beginSheetModalForWindow:prefsPanel completionHandler:^(NSInteger result){
+	[panel beginSheetModalForWindow:parentWindow completionHandler:^(NSInteger result){
         if (result == NSModalResponseOK) {
 			NSURL* url = [[panel URLs] firstObject];
 
 			if (!url) { return; }
 
-			if (sender == saveToLocationButton) {
+			if (!autoSave) {
 				[[NSUserDefaults standardUserDefaults] setURL:url forKey:@"saveToLocation"];
+                [saveToLocationButton setTitle:[url lastPathComponent]];
 			}
-			else if (sender == autoSaveToLocationButton) {
+			else {
 				[[NSUserDefaults standardUserDefaults] setURL:url forKey:@"autoSaveToLocation"];
+                [autoSaveToLocationButton setTitle:[url lastPathComponent]];
 			}
-			[sender setTitle:[url lastPathComponent]];
+            [self.swiftPreferencesWindowController refreshDynamicContent];
 		}
 
 	}];
@@ -1463,10 +1535,10 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 	[NSApp activateIgnoringOtherApps:YES];
     
     NSAlert *alert = [[NSAlert alloc] init];
-    [alert setMessageText:@"Clear Clipping List"];
-    [alert setInformativeText:@"Do you want to clear all recent clippings?"];
-    [alert addButtonWithTitle:@"Clear"];
-    [alert addButtonWithTitle:@"Cancel"];
+    [alert setMessageText:FCLocalizedString(@"Clear Clipping List")];
+    [alert setInformativeText:FCLocalizedString(@"Do you want to clear all recent clippings?")];
+    [alert addButtonWithTitle:FCLocalizedString(@"Clear")];
+    [alert addButtonWithTitle:FCLocalizedString(@"Cancel")];
     choice = [alert runModal];
     [alert release];
 	
@@ -1487,56 +1559,89 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
     [self updateMenu];
 }
 
+- (NSImage *)previewImageForClipping:(FlycutClipping *)clipping size:(CGFloat)size
+{
+    if (![clipping isImage])
+        return nil;
+
+    NSImage *image = [[[NSImage alloc] initWithData:[clipping imageData]] autorelease];
+    if (!image)
+        return nil;
+
+    NSImage *preview = [[[NSImage alloc] initWithSize:NSMakeSize(size, size)] autorelease];
+    [preview lockFocus];
+    [[NSGraphicsContext currentContext] setImageInterpolation:NSImageInterpolationHigh];
+    [image drawInRect:NSMakeRect(0, 0, size, size)
+             fromRect:NSZeroRect
+            operation:NSCompositingOperationSourceOver
+             fraction:1.0];
+    [preview unlockFocus];
+    return preview;
+}
+
+- (NSArray<NSDictionary *> *)displayItemsMatchingSearch:(NSString *)search
+{
+    NSInteger howMany = [[NSUserDefaults standardUserDefaults] integerForKey:@"displayNum"];
+    NSArray *indexes = [flycutOperator previousIndexes:(int)howMany containing:search];
+    NSMutableArray *items = [NSMutableArray array];
+
+    for (NSNumber *storeIndex in indexes) {
+        FlycutClipping *clipping = [flycutOperator getClippingFromIndex:[storeIndex intValue]];
+        if (!clipping)
+            continue;
+
+        NSString *title = [clipping isImage] ? FCLocalizedString(@"Image") : [clipping displayString];
+        NSString *localizedName = [clipping appLocalizedName] ?: @"";
+        NSString *dateString = @"";
+        if ([clipping timestamp] > 0)
+            dateString = [dateFormat stringFromDate:[NSDate dateWithTimeIntervalSince1970:[clipping timestamp]]] ?: @"";
+        NSMutableDictionary *item = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+                                     title ?: @"", @"title",
+                                     storeIndex, @"storeIndex",
+                                     @([clipping isImage]), @"isImage",
+                                     nil];
+        [item setObject:[clipping contents] ?: @"" forKey:@"rawContent"];
+        if ([localizedName length] > 0)
+            [item setObject:localizedName forKey:@"sourceName"];
+        if ([dateString length] > 0)
+            [item setObject:dateString forKey:@"dateText"];
+
+        if ([clipping isImage]) {
+            NSImage *preview = [self previewImageForClipping:clipping size:30.0];
+            if (preview)
+                [item setObject:preview forKey:@"previewImage"];
+        }
+
+        [items addObject:item];
+    }
+
+    return items;
+}
+
 - (void)updateMenu {
     dispatch_async(dispatch_get_main_queue(), ^{
-    if ( !statusItem || !statusItem.isEnabled )
+    if ( !statusItem || !statusItem.button.enabled )
         return;
 
         [self updateMenuContaining:nil];
         // Clear the search box whenever the is reason for updateMenu to be called, since the nil call will produce non-searched results.
         [searchBox setStringValue:@""];
         [[[searchBox cell] cancelButtonCell] performClick:self];
+        [self.statusPopoverController resetSearch];
     });
 }
 
 - (void)updateMenuContaining:(NSString*)search {
 	// Use GDC to prevent concurrent modification of the menu, since that would be messy.
 	dispatch_async(dispatch_get_main_queue(), ^{
-		[jcMenu setMenuChangedMessagesEnabled:NO];
-
-		NSArray *returnedDisplayStrings = [flycutOperator previousDisplayStrings:[[NSUserDefaults standardUserDefaults] integerForKey:@"displayNum"] containing:search];
-
-		NSArray *menuItems = [[[jcMenu itemArray] reverseObjectEnumerator] allObjects];
-
-		NSArray *clipStrings = [[returnedDisplayStrings reverseObjectEnumerator] allObjects];
-
-		// Figure out if the number of menu items is changing and add or remove entries as necessary.
-		// If we remove all of them and add all new ones, the menu won't redraw if the count is unchanged, so just reuse them by changing their title.
-		int oldItems = [menuItems count]-jcMenuBaseItemsCount;
-		int newItems = [clipStrings count];
-        DLog(@"list=%@, oldItems=%d, newItems=%d", returnedDisplayStrings, oldItems, newItems);
-        
-        for ( int i = 0; i < oldItems; i++ )
-            [jcMenu removeItemAtIndex:0];
-        
-        for ( int i = 0; i < newItems; i++ )
-        {
-            NSMenuItem *item;
-            item = [[NSMenuItem alloc] initWithTitle:[clipStrings objectAtIndex:i]
-                                              action:@selector(processMenuClippingSelection:)
-                                       keyEquivalent:@""];
-            [item setTarget:self];
-            [item setEnabled:YES];
-            [jcMenu insertItem:item atIndex:0];
-            // Way back in 0.2, failure to release the new item here was causing a quite atrocious memory leak.
-            [item release];
-        }
+		NSArray *displayItems = [self displayItemsMatchingSearch:search];
+        [self.statusPopoverController updateItems:displayItems];
     });
 }
 
 -(IBAction)processMenuClippingSelection:(id)sender
 {
-	int index=[[sender menu] indexOfItem:sender];
+	int index = [[sender representedObject] intValue];
 	[self pasteIndexAndUpdate:index];
 
 	if ( [[NSUserDefaults standardUserDefaults] boolForKey:@"menuSelectionPastes"] ) {
@@ -1554,13 +1659,25 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 
 -(void)addClipToPasteboard:(NSString*)pbFullText
 {
-    NSArray *pbTypes;
-    pbTypes = [NSArray arrayWithObjects:@"NSStringPboardType",NULL];
-    
-    [jcPasteboard declareTypes:pbTypes owner:NULL];
-	
-    [jcPasteboard setString:pbFullText forType:@"NSStringPboardType"];
+    [jcPasteboard declareTypes:@[NSPasteboardTypeString] owner:NULL];
+    [jcPasteboard setString:pbFullText forType:NSPasteboardTypeString];
     [self setPBBlockCount:[NSNumber numberWithInt:[jcPasteboard changeCount]]];
+}
+
+- (void)addClippingToPasteboard:(FlycutClipping *)clipping
+{
+    if ([clipping isImage]) {
+        NSData *imageData = [clipping imageData];
+        NSString *pasteboardType = [clipping type];
+        if (nil == pasteboardType || [pasteboardType length] == 0)
+            pasteboardType = NSPasteboardTypePNG;
+        [jcPasteboard declareTypes:@[pasteboardType] owner:nil];
+        [jcPasteboard setData:imageData forType:pasteboardType];
+        [self setPBBlockCount:[NSNumber numberWithInt:[jcPasteboard changeCount]]];
+        return;
+    }
+
+    [self addClipToPasteboard:[clipping contents]];
 }
 
 -(void) stackDown
@@ -1577,14 +1694,15 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 -(void) fillBezel
 {
     FlycutClipping* clipping = [flycutOperator clippingAtStackPosition];
-    [bezel setText:[NSString stringWithFormat:@"%@", [clipping contents]]];
+    NSString *bezelText = [clipping isImage] ? FCLocalizedString(@"Image") : [NSString stringWithFormat:@"%@", [clipping contents]];
+    [bezel setText:bezelText];
     
     int currentPos = [flycutOperator stackPosition] + 1;
     int totalCount = [flycutOperator jcListCount];
     int displayNum = [[NSUserDefaults standardUserDefaults] integerForKey:@"displayNum"];
     
     NSLog(@"fillBezel: showing %d of %d (displayNum pref=%d)", currentPos, totalCount, displayNum);
-    [bezel setCharString:[NSString stringWithFormat:@"%d of %d", currentPos, totalCount]];
+    [bezel setCharString:[NSString stringWithFormat:FCLocalizedString(@"%d of %d"), currentPos, totalCount]];
     
     NSString *localizedName = [clipping appLocalizedName];
     if ( nil == localizedName )
@@ -1598,6 +1716,7 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
     [bezel setSource:localizedName];
     [bezel setDate:dateString];
     [bezel setSourceIcon:icon];
+    [bezel setPreviewImage:[clipping isImage] ? [self previewImageForClipping:clipping size:88.0] : nil];
 }
 
 -(void) stackUp
@@ -1648,16 +1767,89 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 
 - (NSString*)alertWithMessageText:(NSString*)message informationText:(NSString*)information buttonsTexts:(NSArray*)buttons {
 	NSAlert *alert = [[NSAlert alloc] init];
-	[alert setMessageText:message];
+	[alert setMessageText:FCLocalizedString(message)];
 	[buttons enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-		[alert addButtonWithTitle:obj];
+		[alert addButtonWithTitle:FCLocalizedString(obj)];
 	}];
-	[alert setInformativeText:information];
+	[alert setInformativeText:FCLocalizedString(information)];
 	NSInteger result = [alert runModal];
 	[alert release];
 	if ( result < NSAlertFirstButtonReturn || result >= NSAlertFirstButtonReturn + [buttons count] )
 		return nil;
 	return buttons[result - NSAlertFirstButtonReturn];
+}
+
+- (void)applyLocalization
+{
+    [self localizeMenu:jcMenu];
+    [self localizeWindow:prefsPanel];
+    if ([[searchBox cell] respondsToSelector:@selector(setPlaceholderString:)]) {
+        [(id)[searchBox cell] setPlaceholderString:FCLocalizedString(@"Search")];
+    }
+}
+
+- (void)localizeWindow:(NSWindow *)window
+{
+    if (!window)
+        return;
+
+    if (window.title.length > 0)
+        window.title = FCLocalizedString(window.title);
+    [self localizeView:window.contentView];
+}
+
+- (void)localizeMenu:(NSMenu *)menu
+{
+    if (!menu)
+        return;
+
+    if (menu.title.length > 0)
+        menu.title = FCLocalizedString(menu.title);
+    for (NSMenuItem *item in menu.itemArray)
+        [self localizeMenuItem:item];
+}
+
+- (void)localizeMenuItem:(NSMenuItem *)item
+{
+    if (!item.isSeparatorItem && item.title.length > 0)
+        item.title = FCLocalizedString(item.title);
+    if (item.toolTip.length > 0)
+        item.toolTip = FCLocalizedString(item.toolTip);
+    if (item.submenu)
+        [self localizeMenu:item.submenu];
+    if (item.view)
+        [self localizeView:item.view];
+}
+
+- (void)localizeView:(NSView *)view
+{
+    if (!view)
+        return;
+
+    if (view.toolTip.length > 0)
+        view.toolTip = FCLocalizedString(view.toolTip);
+
+    if ([view isKindOfClass:[NSButton class]]) {
+        NSButton *button = (NSButton *)view;
+        if (button.title.length > 0)
+            button.title = FCLocalizedString(button.title);
+    } else if ([view isKindOfClass:[NSTextField class]]) {
+        NSTextField *textField = (NSTextField *)view;
+        if (!textField.isEditable && textField.stringValue.length > 0)
+            textField.stringValue = FCLocalizedString(textField.stringValue);
+    } else if ([view isKindOfClass:[NSTabView class]]) {
+        NSTabView *tabView = (NSTabView *)view;
+        for (NSTabViewItem *item in tabView.tabViewItems) {
+            if (item.label.length > 0)
+                item.label = FCLocalizedString(item.label);
+            [self localizeView:item.view];
+        }
+    } else if ([view isKindOfClass:[NSPopUpButton class]]) {
+        [self localizeMenu:[(NSPopUpButton *)view menu]];
+    }
+
+    for (NSView *subview in view.subviews)
+        [self localizeView:subview];
 }
 
 - (void)beginUpdates {
@@ -1742,7 +1934,7 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 		searchHotKey = [[SGHotKey alloc] initWithIdentifier:@"searchHotKey"
 												   keyCombo:[SGKeyCombo keyComboWithKeyCode:[searchRecorder keyCombo].code
 																				  modifiers:[searchRecorder cocoaToCarbonFlags: [searchRecorder keyCombo].flags]]];
-		[searchHotKey setName: @"Search Clipboard HotKey"];
+		[searchHotKey setName:FCLocalizedString(@"Search Clipboard HotKey")];
 		[searchHotKey setTarget: self];
 		[searchHotKey setAction: @selector(hitSearchHotKey:)];
 		[[SGHotKeyCenter sharedCenter] registerHotKey:searchHotKey];
@@ -1763,101 +1955,27 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 
 - (void)buildSearchWindow
 {
-	NSLog(@"buildSearchWindow called");
-	if (searchWindow) {
-		NSLog(@"Search window already exists, returning");
-		return; // Already built
-	}
+	if (self.swiftSearchWindowController)
+		return;
 
-	// Create a normal window with standard controls
-	CGFloat windowWidth = 600;
-	CGFloat windowHeight = 400;
-
-	NSRect windowFrame = NSMakeRect(0, 0, windowWidth, windowHeight);
-	searchWindow = [[SearchWindow alloc] initWithContentRect:windowFrame
-													styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
-													  backing:NSBackingStoreBuffered
-														defer:NO];
-	((SearchWindow *)searchWindow).appController = self;
-
-	[searchWindow setTitle:@"Search Clipboard"];
-	[searchWindow setLevel:NSFloatingWindowLevel];
-	[searchWindow center];
-
-	// Create the search field at the top
-	CGFloat fieldY = windowHeight - 60;
-	searchWindowSearchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(20, fieldY, windowWidth - 40, 25)];
-	[searchWindowSearchField setTarget:self];
-	[searchWindowSearchField setAction:@selector(searchWindowSearchFieldChanged:)];
-	[searchWindowSearchField setFont:[NSFont systemFontOfSize:13]];
-	[searchWindowSearchField setDelegate:self];  // Set delegate for keyboard handling
-	[[searchWindow contentView] addSubview:searchWindowSearchField];
-
-	// Create the table view
-	CGFloat tableHeight = fieldY - 20;
-	NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(20, 20, windowWidth - 40, tableHeight)];
-	[scrollView setHasVerticalScroller:YES];
-	[scrollView setAutohidesScrollers:YES];
-	[scrollView setBorderType:NSBezelBorder];
-
-	searchWindowTableView = [[NSTableView alloc] init];
-	[searchWindowTableView setDelegate:self];
-	[searchWindowTableView setDataSource:self];
-	[searchWindowTableView setTarget:self];
-	[searchWindowTableView setDoubleAction:@selector(searchWindowItemSelected:)];
-	[searchWindowTableView setRowHeight:24];
-	[searchWindowTableView setIntercellSpacing:NSMakeSize(3, 2)];
-
-	// Add a single column
-	NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"content"];
-	[column setTitle:@"Clipboard Content"];
-	[column setWidth:windowWidth - 60];
-	[searchWindowTableView addTableColumn:column];
-	[column release];
-
-	[scrollView setDocumentView:searchWindowTableView];
-	[[searchWindow contentView] addSubview:scrollView];
-	[scrollView release];
-
-	// Set up window delegate
-	[searchWindow setDelegate:self];
-
-	// Set initial first responder for proper focus
-	[searchWindow setInitialFirstResponder:searchWindowSearchField];
+	self.swiftSearchWindowController = [[[FlycutSearchWindowController alloc] init] autorelease];
+	self.swiftSearchWindowController.bridgeDelegate = self;
 }
 
 - (void)showSearchWindow
 {
-	if (!searchWindow) {
+	if (!self.swiftSearchWindowController) {
 		[self buildSearchWindow];
 	}
 
 	[self updateSearchResults];
-
-	// Activate app and show window
-	[NSApp activateIgnoringOtherApps:YES];
-	[searchWindow makeKeyAndOrderFront:self];
-
-	// Set focus on search field
-	[searchWindow makeFirstResponder:searchWindowSearchField];
-
+	[self.swiftSearchWindowController showAndFocus];
 	isSearchWindowDisplayed = YES;
 }
 
 - (void)hideSearchWindow
 {
-	if (searchWindow) {
-		[searchWindow orderOut:nil];
-		// Clear the search field for next time
-		[searchWindowSearchField setStringValue:@""];
-	}
-
-	// Clean up search results
-	if (searchResults) {
-		[searchResults release];
-		searchResults = nil;
-	}
-
+	[self.swiftSearchWindowController hideWindow];
 	isSearchWindowDisplayed = NO;
 }
 
@@ -1868,58 +1986,12 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 
 - (void)updateSearchResults
 {
-	NSString *searchText = [searchWindowSearchField stringValue];
-
-	// Release previous results if they exist
-	if (searchResults) {
-		[searchResults release];
-		searchResults = nil;
-	}
-
-	if (!searchText || [searchText length] == 0) {
-		// Show all items
-		searchResults = [[flycutOperator previousDisplayStrings:[[NSUserDefaults standardUserDefaults] integerForKey:@"displayNum"] containing:nil] retain];
-	} else {
-		// Search for matching items
-		searchResults = [[flycutOperator previousDisplayStrings:[[NSUserDefaults standardUserDefaults] integerForKey:@"displayNum"] containing:searchText] retain];
-	}
-
-	[searchWindowTableView reloadData];
-
-	// Auto-select first row for keyboard navigation
-	if (searchResults && [searchResults count] > 0) {
-		[searchWindowTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
-	}
+	[self.swiftSearchWindowController updateItems:[self displayItemsMatchingSearch:nil]];
 }
 
 - (IBAction)searchWindowItemSelected:(id)sender
 {
-	NSInteger selectedRow = [searchWindowTableView selectedRow];
-	if (selectedRow < 0) {
-		selectedRow = 0; // Default to first item if none selected
-	}
-	
-	if (selectedRow < [searchResults count]) {
-		// Get the content and paste it like bezel does
-		NSString* searchText = [searchWindowSearchField stringValue];
-		NSArray *mapping = nil;
-		int position = (int)selectedRow;
-		
-		if (searchText && [searchText length] > 0) {
-			mapping = [flycutOperator previousIndexes:[[NSUserDefaults standardUserDefaults] integerForKey:@"displayNum"] containing:searchText];
-			position = [mapping[selectedRow] intValue];
-		}
-		
-		NSString *content = [flycutOperator getPasteFromIndex:position];
-		if (content) {
-			[self addClipToPasteboard:content];
-			[self updateMenu]; // Update menu like bezel does
-			[self hideSearchWindow];
-			
-			// Always paste immediately (like bezel behavior), ignore menuSelectionPastes preference
-			[self performSelector:@selector(fakeCommandV) withObject:nil afterDelay:0.3];
-		}
-	}
+	(void)sender;
 }
 
 #pragma mark - Search Window Table View Data Source & Delegate
@@ -1964,14 +2036,14 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 
 - (void)windowWillClose:(NSNotification *)notification
 {
-	if ([notification object] == searchWindow) {
+	if ([notification object] == searchWindow || [notification object] == self.swiftSearchWindowController.window) {
 		isSearchWindowDisplayed = NO;
 	}
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)sender
 {
-	if (sender == searchWindow) {
+	if (sender == searchWindow || sender == self.swiftSearchWindowController.window) {
 		[self hideSearchWindow];
 		return NO; // We handle the closing ourselves
 	}
@@ -1996,11 +2068,164 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 	}
 }
 
+- (void)searchWindowController:(FlycutSearchWindowController *)controller didSelectStoreIndex:(NSNumber *)storeIndex
+{
+    (void)controller;
+    [self pasteIndexAndUpdate:[storeIndex intValue]];
+    [self performSelector:@selector(fakeCommandV) withObject:nil afterDelay:0.3];
+}
+
+- (void)searchWindowControllerDidClose:(FlycutSearchWindowController *)controller
+{
+    (void)controller;
+    isSearchWindowDisplayed = NO;
+}
+
+- (void)preferencesWindowControllerDidRequestAccessibilityCheck:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self recheckAccessibility:nil];
+}
+
+- (void)preferencesWindowController:(FlycutPreferencesWindowController *)controller didRequestSelectSaveLocation:(NSNumber *)autoSave
+{
+    (void)controller;
+    [self presentSaveLocationPanelForAutoSave:[autoSave boolValue]];
+}
+
+- (void)preferencesWindowController:(FlycutPreferencesWindowController *)controller didChangeMainHotKeyKeyCode:(NSNumber *)keyCode modifierFlags:(NSNumber *)modifierFlags
+{
+    (void)controller;
+    [mainRecorder setKeyCombo:SRMakeKeyCombo([keyCode intValue], [modifierFlags unsignedIntegerValue])];
+    [self toggleMainHotKey:mainRecorder];
+    [self setHotKeyPreferenceForRecorder:mainRecorder];
+}
+
+- (void)preferencesWindowController:(FlycutPreferencesWindowController *)controller didChangeSearchHotKeyKeyCode:(NSNumber *)keyCode modifierFlags:(NSNumber *)modifierFlags
+{
+    (void)controller;
+    [searchRecorder setKeyCombo:SRMakeKeyCombo([keyCode intValue], [modifierFlags unsignedIntegerValue])];
+    [self toggleSearchHotKey:searchRecorder];
+    [self setHotKeyPreferenceForRecorder:searchRecorder];
+}
+
+- (void)preferencesWindowController:(FlycutPreferencesWindowController *)controller didChangeRememberNum:(NSNumber *)value
+{
+    (void)controller;
+    [self checkRememberNumPref:[value intValue] forPrimaryStore:YES];
+}
+
+- (void)preferencesWindowController:(FlycutPreferencesWindowController *)controller didChangeFavoritesRememberNum:(NSNumber *)value
+{
+    (void)controller;
+    [self checkFavoritesRememberNumPref:[value intValue]];
+}
+
+- (void)preferencesWindowControllerDidChangeDisplayNum:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self updateMenu];
+}
+
+- (void)preferencesWindowControllerDidChangeBezelAppearance:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self setBezelAlpha:@([[NSUserDefaults standardUserDefaults] floatForKey:@"bezelAlpha"])];
+    [self setBezelWidth:@([[NSUserDefaults standardUserDefaults] floatForKey:@"bezelWidth"])];
+    [self setBezelHeight:@([[NSUserDefaults standardUserDefaults] floatForKey:@"bezelHeight"])];
+}
+
+- (void)preferencesWindowControllerDidChangeMenuIcon:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self switchMenuIconTo:[[NSUserDefaults standardUserDefaults] integerForKey:@"menuIcon"]];
+}
+
+- (void)preferencesWindowControllerDidChangeDisplaySource:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self setupBezel:nil];
+}
+
+- (void)preferencesWindowControllerDidChangeLoadOnStartup:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self toggleLoadOnStartup:nil];
+}
+
+- (void)preferencesWindowControllerDidChangeSyncSettings:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self toggleICloudSyncSettings:nil];
+}
+
+- (void)preferencesWindowControllerDidChangeSyncClippings:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self toggleICloudSyncClippings:nil];
+}
+
+- (void)preferencesWindowControllerDidChangeSavePreference:(FlycutPreferencesWindowController *)controller
+{
+    (void)controller;
+    [self setSavePreference:nil];
+}
+
+- (void)statusPopoverController:(FlycutStatusPopoverController *)controller didSelectStoreIndex:(NSNumber *)storeIndex
+{
+    (void)controller;
+    [self pasteIndexAndUpdate:[storeIndex intValue]];
+
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"menuSelectionPastes"]) {
+        [self performSelector:@selector(hideApp) withObject:nil];
+        [self performSelector:@selector(fakeCommandV) withObject:nil afterDelay:0.3];
+    }
+}
+
+- (void)statusPopoverControllerDidRequestClearAll:(FlycutStatusPopoverController *)controller
+{
+    (void)controller;
+    [self clearClippingList:nil];
+}
+
+- (void)statusPopoverControllerDidRequestMergeAll:(FlycutStatusPopoverController *)controller
+{
+    (void)controller;
+    [self mergeClippingList:nil];
+}
+
+- (void)statusPopoverControllerDidRequestPreferences:(FlycutStatusPopoverController *)controller
+{
+    (void)controller;
+    [self showPreferencePanel:nil];
+}
+
+- (void)statusPopoverControllerDidRequestAbout:(FlycutStatusPopoverController *)controller
+{
+    (void)controller;
+    [self activateAndOrderFrontStandardAboutPanel:nil];
+}
+
+- (void)statusPopoverControllerDidRequestQuit:(FlycutStatusPopoverController *)controller
+{
+    (void)controller;
+    [NSApp terminate:nil];
+}
+
+- (void)statusPopoverControllerDidClose:(FlycutStatusPopoverController *)controller
+{
+    (void)controller;
+    statusItem.button.state = NSControlStateValueOff;
+}
+
 - (void) dealloc {
 	[bezel release];
 	[srTransformer release];
 	[searchRecorder release];
-	[searchWindow release]; // This will release its subviews automatically
+	[self.swiftSearchWindowController release];
+	[self.swiftPreferencesWindowController release];
+	[self.statusPopoverController release];
+	[searchWindow release]; // Legacy ivar retained for compatibility
 	[searchResults release];
 	[super dealloc];
 }

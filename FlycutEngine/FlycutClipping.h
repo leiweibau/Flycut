@@ -17,6 +17,8 @@
     NSString * clipContents;
 // The text type
     NSString * clipType;
+// Optional image payload for image clippings
+    NSData   * clipImageData;
 // The display length
     int clipDisplayLength;
 // The display string
@@ -32,6 +34,7 @@
 }
 
 -(id) initWithContents:(NSString *)contents withType:(NSString *)type withDisplayLength:(int)displayLength withAppLocalizedName:(NSString *)localizedName withAppBundleURL:(NSString *)bundleURL withTimestamp:(NSInteger)timestamp;
+-(id) initWithContents:(NSString *)contents withType:(NSString *)type withImageData:(NSData *)imageData withDisplayLength:(int)displayLength withAppLocalizedName:(NSString *)localizedName withAppBundleURL:(NSString *)bundleURL withTimestamp:(NSInteger)timestamp;
 /* -(id) initWithCoder:(NSCoder *)coder;
 -(void) decodeWithCoder:(NSCoder *)coder; */
 -(NSString *) description;
@@ -49,10 +52,12 @@
 -(int) displayLength;
 -(NSString *) displayString;
 -(NSString *) type;
+- (NSData *) imageData;
 -(NSString *) appLocalizedName;
 -(NSString *) appBundleURL;
 -(NSInteger) timestamp;
 -(BOOL) hasName;
+- (BOOL) isImage;
 
 // Additional functions
 -(void) resetDisplayString;

@@ -16,29 +16,46 @@
 
 -(id) init
 {
-    [self initWithContents:@""
-                  withType:@""
-         withDisplayLength:40
-      withAppLocalizedName:@""
-          withAppBundleURL:nil
-             withTimestamp:0];
+    self = [self initWithContents:@""
+                         withType:@""
+                    withImageData:nil
+                withDisplayLength:40
+             withAppLocalizedName:@""
+                 withAppBundleURL:nil
+                    withTimestamp:0];
     return self;
 }
 
 -(id) initWithContents:(NSString *)contents withType:(NSString *)type withDisplayLength:(int)displayLength withAppLocalizedName:(NSString *)localizedName withAppBundleURL:(NSString*)bundleURL withTimestamp:(NSInteger)timestamp
 {
-    [super init];
+    return [self initWithContents:contents
+                         withType:type
+                    withImageData:nil
+                withDisplayLength:displayLength
+             withAppLocalizedName:localizedName
+                 withAppBundleURL:bundleURL
+                    withTimestamp:timestamp];
+}
+
+-(id) initWithContents:(NSString *)contents withType:(NSString *)type withImageData:(NSData *)imageData withDisplayLength:(int)displayLength withAppLocalizedName:(NSString *)localizedName withAppBundleURL:(NSString*)bundleURL withTimestamp:(NSInteger)timestamp
+{
+    self = [super init];
+    if (!self)
+        return nil;
+
     clipContents = [[[NSString alloc] init] retain];
     clipDisplayString = [[[NSString alloc] init] retain];
     clipType = [[[NSString alloc] init] retain];
+    clipImageData = nil;
 
     [self setContents:contents setDisplayLength:displayLength];
     [self setType:type];
+    [self setImageData:imageData];
     [self setAppLocalizedName:localizedName];
     [self setAppBundleURL:bundleURL];
     [self setTimestamp:timestamp];
     [self setHasName:false];
-    
+
     return self;
 }
 
@@ -100,6 +117,15 @@
     [old release];
 }
 
+-(void) setImageData:(NSData *)newImageData
+{
+    id old = clipImageData;
+    [newImageData retain];
+    clipImageData = newImageData;
+    [old release];
+    [self resetDisplayString];
+}
+
 -(void) setDisplayLength:(int)newDisplayLength
 {
     if ( newDisplayLength > 0 && clipDisplayLength != newDisplayLength ) {
@@ -136,6 +162,12 @@
 
 -(void) resetDisplayString
 {
+    if ([self isImage]) {
+        [clipDisplayString release];
+        clipDisplayString = [@"Image" retain];
+        return;
+    }
+
     NSString *newDisplayString, *firstLineOfClipping, *trimmedString;
 	NSUInteger start, lineEnd, contentsEnd;
 	NSRange startRange = NSMakeRange(0,0);
@@ -201,6 +233,11 @@
     return clipType;
 }
 
+-(NSData *) imageData
+{
+    return clipImageData;
+}
+
 -(NSString *) displayString
 {
     // QUESTION
@@ -216,12 +253,19 @@
     return clipHasName;
 }
 
+- (BOOL)isImage
+{
+    return nil != clipImageData && [clipImageData length] > 0;
+}
+
 - (BOOL)isEqual:(id)other {
     if (other == self)
         return YES;
     if (!other || ![other isKindOfClass:[self class]])
         return NO;
     FlycutClipping * otherClip = (FlycutClipping *)other;
+    if ([self isImage] || [otherClip isImage])
+        return [[self imageData] isEqualToData:[otherClip imageData]];
     return (/*[self.type isEqualToString:otherClip.type] &&*/ // Type is under-utilized a this time and will mismatch on cross-device (macOS <-> iOS) usage.  This should be revisited once we have support for more than just raw text clippings.
             [self.contents isEqualToString:otherClip.contents]);
 }
@@ -232,6 +276,7 @@
 {
     [clipContents release];
     [clipType release];
+    [clipImageData release];
     [appLocalizedName release];
     [appBundleURL release];
     clipDisplayLength = 0;

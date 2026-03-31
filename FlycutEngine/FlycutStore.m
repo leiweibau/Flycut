@@ -30,7 +30,10 @@
 	if ( nowRemembering <= 0 )
 		nowRemembering = 40;
 
-    [super init];
+    self = [super init];
+    if (!self)
+        return nil;
+
     jcList = [[NSMutableArray alloc] init];
 	insertionJournal = [[NSMutableArray alloc] init];
 	deletionJournal = [[NSMutableArray alloc] init];
@@ -75,7 +78,7 @@
 }
 
 // Add a clipping
--(bool) addClipping:(NSString *)clipping ofType:(NSString *)type fromAppLocalizedName:(NSString *)appLocalizedName fromAppBundleURL:(NSString *)bundleURL atTimestamp:(int) timestamp{
+-(bool) addClipping:(NSString *)clipping ofType:(NSString *)type fromAppLocalizedName:(NSString *)appLocalizedName fromAppBundleURL:(NSString *)bundleURL atTimestamp:(NSInteger) timestamp{
     if ([clipping length] == 0) {
         return NO;
     }
@@ -318,9 +321,9 @@
 
 -(NSString *) clippingTypeAtPosition:(int)index
 {
+    FlycutClipping *clipping = [jcList objectAtIndex:index];
     NSString *returnString;
-    returnString = [NSString stringWithString:[[jcList objectAtIndex:index] type]];
-//    return [[jcList objectAtIndex:index] type];
+    returnString = [NSString stringWithString:[clipping type]];
     return returnString;
 }
 

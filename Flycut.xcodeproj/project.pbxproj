@@ -67,6 +67,15 @@
 		E5334CA52DBF0A1D00AAEAEE /* FlycutClipping.m in Sources */ = {isa = PBXBuildFile; fileRef = E5334CA02DBF0A1D00AAEAEE /* FlycutClipping.m */; };
 		E5334CA62DBF0A1D00AAEAEE /* FlycutStore.h in Headers */ = {isa = PBXBuildFile; fileRef = E5334CA12DBF0A1D00AAEAEE /* FlycutStore.h */; };
 		E5334CA72DBF0A1D00AAEAEE /* FlycutClipping.h in Headers */ = {isa = PBXBuildFile; fileRef = E5334C9F2DBF0A1D00AAEAEE /* FlycutClipping.h */; };
+		F10000012EB1000100000001 /* FlycutLocalization.h in Headers */ = {isa = PBXBuildFile; fileRef = F10000112EB1000100000001 /* FlycutLocalization.h */; };
+		F10000022EB1000100000001 /* FlycutLocalization.m in Sources */ = {isa = PBXBuildFile; fileRef = F10000122EB1000100000001 /* FlycutLocalization.m */; };
+		F10000032EB1000100000001 /* FlycutSearchWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000132EB1000100000001 /* FlycutSearchWindowController.swift */; };
+		F10000042EB1000100000001 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F10000212EB1000100000001 /* Localizable.strings */; };
+		F10000052EB1000100000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F10000222EB1000100000001 /* InfoPlist.strings */; };
+		F10000062EB1000100000001 /* FlycutPreferencesWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000182EB1000100000001 /* FlycutPreferencesWindowController.swift */; };
+		F10000072EB1000100000001 /* FlycutBezelContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000192EB1000100000001 /* FlycutBezelContentView.swift */; };
+		F10000082EB1000100000001 /* FlycutMenuItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100001A2EB1000100000001 /* FlycutMenuItemView.swift */; };
+		F10000092EB1000100000001 /* FlycutStatusPopoverController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100001B2EB1000100000001 /* FlycutStatusPopoverController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -172,6 +181,17 @@
 		E5334CA02DBF0A1D00AAEAEE /* FlycutClipping.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FlycutClipping.m; sourceTree = "<group>"; };
 		E5334CA12DBF0A1D00AAEAEE /* FlycutStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlycutStore.h; sourceTree = "<group>"; };
 		E5334CA22DBF0A1D00AAEAEE /* FlycutStore.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FlycutStore.m; sourceTree = "<group>"; };
+		F10000112EB1000100000001 /* FlycutLocalization.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlycutLocalization.h; sourceTree = "<group>"; };
+		F10000122EB1000100000001 /* FlycutLocalization.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FlycutLocalization.m; sourceTree = "<group>"; };
+		F10000132EB1000100000001 /* FlycutSearchWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlycutSearchWindowController.swift; sourceTree = "<group>"; };
+		F10000142EB1000100000001 /* English */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = English; path = English.lproj/Localizable.strings; sourceTree = "<group>"; };
+		F10000152EB1000100000001 /* German */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = German; path = German.lproj/Localizable.strings; sourceTree = "<group>"; };
+		F10000162EB1000100000001 /* English */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = English; path = English.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F10000172EB1000100000001 /* German */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = German; path = German.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F10000182EB1000100000001 /* FlycutPreferencesWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlycutPreferencesWindowController.swift; sourceTree = "<group>"; };
+		F10000192EB1000100000001 /* FlycutBezelContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlycutBezelContentView.swift; sourceTree = "<group>"; };
+		F100001A2EB1000100000001 /* FlycutMenuItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlycutMenuItemView.swift; sourceTree = "<group>"; };
+		F100001B2EB1000100000001 /* FlycutStatusPopoverController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlycutStatusPopoverController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -194,6 +214,13 @@
 			children = (
 				AABE497A09FF9CD000A6A239 /* AppController.h */,
 				AABE497B09FF9CD000A6A239 /* AppController.m */,
+				F10000112EB1000100000001 /* FlycutLocalization.h */,
+				F10000122EB1000100000001 /* FlycutLocalization.m */,
+				F10000192EB1000100000001 /* FlycutBezelContentView.swift */,
+				F100001A2EB1000100000001 /* FlycutMenuItemView.swift */,
+				F100001B2EB1000100000001 /* FlycutStatusPopoverController.swift */,
+				F10000182EB1000100000001 /* FlycutPreferencesWindowController.swift */,
+				F10000132EB1000100000001 /* FlycutSearchWindowController.swift */,
 				8D0C11A01F147E3C0046FAA0 /* FlycutOperator.h */,
 				8D0C119E1F147E250046FAA0 /* FlycutOperator.m */,
 				7761C89B139BDF12000FB3AB /* ShortcutRecorder */,
@@ -280,6 +307,8 @@
 				7761C8D8139BE06B000FB3AB /* RemoveShortcut.tif */,
 				7761C8D9139BE06B000FB3AB /* RemoveShortcutPressed.tif */,
 				7761C8DA139BE06B000FB3AB /* RemoveShortcutRollover.tif */,
+				F10000222EB1000100000001 /* InfoPlist.strings */,
+				F10000212EB1000100000001 /* Localizable.strings */,
 				29B97318FDCFA39411CA2CEA /* MainMenu.nib */,
 				8D151CC11FAC2B38005132F0 /* acknowledgements.txt */,
 			);
@@ -402,6 +431,7 @@
 				7761C8AE139BDF12000FB3AB /* SRRecorderCell.h in Headers */,
 				7761C8B0139BDF12000FB3AB /* SRRecorderControl.h in Headers */,
 				7761C8B2139BDF12000FB3AB /* SRValidator.h in Headers */,
+				F10000012EB1000100000001 /* FlycutLocalization.h in Headers */,
 				773ABFB113E9AA1A00AE3969 /* NSWindow+TrueCenter.h in Headers */,
 				DBEB0C9C1442F2AE0080D24E /* NSWindow+ULIZoomEffect.h in Headers */,
 			);
@@ -481,6 +511,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F10000052EB1000100000001 /* InfoPlist.strings in Resources */,
+				F10000042EB1000100000001 /* Localizable.strings in Resources */,
 				8D11072A0486CEB800E47090 /* MainMenu.nib in Resources */,
 				7761C8DB139BE06B000FB3AB /* com.generalarcade.flycut.16.png in Resources */,
 				7761C8DC139BE06B000FB3AB /* com.generalarcade.flycut.32.png in Resources */,
@@ -512,6 +544,12 @@
 			files = (
 				8D11072D0486CEB800E47090 /* main.m in Sources */,
 				AABE497C09FF9CD000A6A239 /* AppController.m in Sources */,
+				F10000022EB1000100000001 /* FlycutLocalization.m in Sources */,
+				F10000072EB1000100000001 /* FlycutBezelContentView.swift in Sources */,
+				F10000082EB1000100000001 /* FlycutMenuItemView.swift in Sources */,
+				F10000092EB1000100000001 /* FlycutStatusPopoverController.swift in Sources */,
+				F10000062EB1000100000001 /* FlycutPreferencesWindowController.swift in Sources */,
+				F10000032EB1000100000001 /* FlycutSearchWindowController.swift in Sources */,
 				77A4F3AE139BD72300F39666 /* SGHotKey.m in Sources */,
 				77A4F3B0139BD72300F39666 /* SGHotKeyCenter.m in Sources */,
 				E5334CA42DBF0A1D00AAEAEE /* FlycutStore.m in Sources */,
@@ -559,6 +597,24 @@
 			name = MainMenu.xib;
 			sourceTree = "<group>";
 		};
+		F10000212EB1000100000001 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F10000142EB1000100000001 /* English */,
+				F10000152EB1000100000001 /* German */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		F10000222EB1000100000001 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F10000162EB1000100000001 /* English */,
+				F10000172EB1000100000001 /* German */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
@@ -597,7 +653,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.1.3;
+				CURRENT_PROJECT_VERSION = 3.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 9478A8FXT3;
 				ENABLE_APP_SANDBOX = NO;
@@ -625,11 +681,14 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 2.1.3.latest;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.generalarcade.flycut;
 				PRODUCT_NAME = Flycut;
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "Flycut-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				WRAPPER_EXTENSION = app;
 				ZERO_LINK = YES;
@@ -647,7 +706,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.1.3;
+				CURRENT_PROJECT_VERSION = 3.0.0;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 9478A8FXT3;
 				ENABLE_APP_SANDBOX = NO;
@@ -672,11 +731,14 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				MARKETING_VERSION = 2.1.3.latest;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.generalarcade.flycut;
 				PRODUCT_NAME = Flycut;
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "Flycut-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				WRAPPER_EXTENSION = app;
 			};

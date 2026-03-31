@@ -240,6 +240,7 @@
 - (bool)saveFromStore:(FlycutStore*)store atIndex:(int)index withPrefix:(NSString*) prefix
 {
     if ( [store jcListCount] > index ) {
+        FlycutClipping *clipping = [store clippingAtPosition:index];
         // Get text from clipping store.
         NSString *pbFullText = [self clippingStringWithCount:index inStore:store];
         pbFullText = [pbFullText stringByReplacingOccurrencesOfString:@"\r" withString:@"\r\n"];
@@ -255,8 +256,9 @@
         NSString *dateString = [dateFormatterForFilename stringFromDate:currentDate];
 
         // Make a file name
-        NSString *fileName = [NSString stringWithFormat:@"%@%@Clipping %@.txt",
-                              prefix, store == favoritesStore ? @"Favorite " : @"", dateString];
+        NSString *fileExtension = [clipping isImage] ? @"png" : @"txt";
+        NSString *fileName = [NSString stringWithFormat:@"%@%@Clipping %@.%@",
+                              prefix, store == favoritesStore ? @"Favorite " : @"", dateString, fileExtension];
 
         // Make a subdirectory, if doing autosave, to avoid a directory with too many files in it as that can make Finder effectively hang on launch if that directory were the desktop.
         NSString *subdirectoryString = nil;
@@ -315,10 +317,14 @@
         }
 
         // Save content to the file
-        [pbFullText writeToFile:fileNameWithPath
-                  atomically:NO
-                    encoding:NSNonLossyASCIIStringEncoding
-                       error:nil];
+        if ([clipping isImage]) {
+            [[clipping imageData] writeToFile:fileNameWithPath atomically:NO];
+        } else {
+            [pbFullText writeToFile:fileNameWithPath
+                      atomically:NO
+                        encoding:NSNonLossyASCIIStringEncoding
+                           error:nil];
+        }
         return YES;
     }
     return NO;
@@ -333,6 +339,11 @@
         return YES;
     }
     return NO;
+}
+
+- (FlycutClipping*)getClippingFromIndex:(int) position
+{
+    return [clippingStore clippingAtPosition:position];
 }
 
 - (NSString*)getPasteFromIndex:(int) position {
@@ -357,7 +368,32 @@
         DLog(@"Out of bounds request to jcList ignored.");
         return nil;
     }
-    return [self clippingStringWithCount:indexInt];
+	return [self clippingStringWithCount:indexInt];
+}
+
+-(bool)addImageClippingData:(NSData*)imageData ofType:(NSString*)type fromApp:(NSString *)appName withAppBundleURL:(NSString *)bundleURL target:(id)selectorTarget clippingAddedSelector:(SEL)clippingAddedSelector
+{
+    if (nil == imageData || [imageData length] == 0)
+        return NO;
+
+    FlycutClipping *newClipping = [[FlycutClipping alloc] initWithContents:@""
+                                                                  withType:type
+                                                             withImageData:imageData
+                                                         withDisplayLength:displayLength
+                                                      withAppLocalizedName:appName
+                                                          withAppBundleURL:bundleURL
+                                                             withTimestamp:[[NSDate date] timeIntervalSince1970]];
+    if ([clippingStore jcListCount] == 0 || ![newClipping isEqual:[clippingStore clippingAtPosition:0]]) {
+        [clippingStore addClipping:newClipping];
+        stackPosition = 0;
+        [selectorTarget performSelector:clippingAddedSelector];
+        [self actionAfterListModification];
+        [newClipping release];
+        return YES;
+    }
+
+    [newClipping release];
+    return NO;
 }
 
 -(BOOL)shouldSkip:(NSString *)contents ofType:(NSString *)type fromAvailableTypes:(NSArray<NSString *> *)availableTypes
@@ -985,12 +1021,26 @@
 		int rangeCap = [savedJCList count] < [store rememberNum] ? [savedJCList count] : [store rememberNum];
 		NSRange loadRange = NSMakeRange(0, rangeCap);
 		NSArray *toBeRestoredClips = [[[savedJCList subarrayWithRange:loadRange] reverseObjectEnumerator] allObjects];
-		for( NSDictionary *aSavedClipping in toBeRestoredClips)
-			[store addClipping:[aSavedClipping objectForKey:@"Contents"]
-							  ofType:[aSavedClipping objectForKey:@"Type"]
-				fromAppLocalizedName:[aSavedClipping objectForKey:@"AppLocalizedName"]
-					fromAppBundleURL:[aSavedClipping objectForKey:@"AppBundleURL"]
-						 atTimestamp:[[aSavedClipping objectForKey:@"Timestamp"] integerValue]];
+		for( NSDictionary *aSavedClipping in toBeRestoredClips) {
+            NSData *imageData = [aSavedClipping objectForKey:@"ImageData"];
+            if (nil != imageData && [imageData length] > 0) {
+                FlycutClipping *clipping = [[FlycutClipping alloc] initWithContents:[aSavedClipping objectForKey:@"Contents"] ?: @""
+                                                                            withType:[aSavedClipping objectForKey:@"Type"]
+                                                                       withImageData:imageData
+                                                                   withDisplayLength:[store displayLen]
+                                                                withAppLocalizedName:[aSavedClipping objectForKey:@"AppLocalizedName"]
+                                                                    withAppBundleURL:[aSavedClipping objectForKey:@"AppBundleURL"]
+                                                                       withTimestamp:[[aSavedClipping objectForKey:@"Timestamp"] integerValue]];
+                [store addClipping:clipping];
+                [clipping release];
+            } else {
+                [store addClipping:[aSavedClipping objectForKey:@"Contents"]
+                                  ofType:[aSavedClipping objectForKey:@"Type"]
+                    fromAppLocalizedName:[aSavedClipping objectForKey:@"AppLocalizedName"]
+                        fromAppBundleURL:[aSavedClipping objectForKey:@"AppBundleURL"]
+                             atTimestamp:[[aSavedClipping objectForKey:@"Timestamp"] integerValue]];
+            }
+        }
 		return YES;
 	} else DLog(@"Not array");
 	return NO;
@@ -1066,6 +1116,10 @@
         val = [clipping appBundleURL];
         if ( nil != val )
             [dict setObject:val forKey:@"AppBundleURL"];
+
+        NSData *imageData = [clipping imageData];
+        if ( nil != imageData )
+            [dict setObject:imageData forKey:@"ImageData"];
 
         int timestamp = [clipping timestamp];
         if ( timestamp > 0 )

@@ -31,7 +31,9 @@
 	NSString			*sourceText;
 	NSString			*dateText;
 	NSImage			 *sourceIconImage;
+	NSImage          *previewImage;
 	NSImage				*icon;
+	NSView           *modernContentView;
 	Boolean			 showSourceField;
 	NSImageView		 *sourceIcon;
 	RoundRecTextField	*sourceFieldBackground;
@@ -63,6 +65,7 @@
 - (void)setSource:(NSString *)newSource;
 - (void)setDate:(NSString *)newDate;
 - (void)setSourceIcon:(NSImage *)newSourceIcon;
+- (void)setPreviewImage:(NSImage *)newPreviewImage;
 
 - (id<BezelWindowDelegate>)delegate;
 - (void)setDelegate:(id<BezelWindowDelegate>)newDelegate;
