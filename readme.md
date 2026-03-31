@@ -80,6 +80,12 @@ See the full [Help File](help.md) for more details.
 
 ## Develop
 
+Build a universal Release app bundle into `dist` with:
+
+```bash
+bash Scripts/package-app.sh
+```
+
 **Contributors:**
 Check the list of contributors [here](https://github.com/haad/Flycut/graphs/contributors)
 
