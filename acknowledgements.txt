@@ -1,28 +1,25 @@
-Support: https://github.com/haad/Flycut.git/issues
-
-This version maintained by haad: https://github.com/haad/Flycut.git
-
 Flycut, developed by General Arcade (http://www.generalarcade.com/). Flycut is a fork of Jumpcut. Original source code avilable on GitHub: http://github.com/TermiT/Flycut
 This fork was updated by haad to compile on Tahoe 26.0 release of Mac OS.
+Thanks to haad (https://github.com/haad), whose Flycut fork provided the foundation this application builds upon.
 
 © General Arcade, 2011 - 2020.
 © Adam Hamsik, 2025 - 2026.
 
 Flycut incorporates the following libraries, used with gratitude:
-	• ShortcutRecorder by Jesper et al. (<http://wafflesoftware.net/>)
-	• a modified version of UKPrefsPanel by Uli Kusterer (<http://www.zathras.de/>)
-	• SGHotKeysLib by Justin Williams (<https://github.com/agilebits/SGHotKeysLib>)
-	• MJCloudKitUserDefaultsSync by Mark Jerde (<https://github.com/MarkJerde/MJCloudKitUserDefaultsSync>)
+	• ShortcutRecorder by Jesper et al. (http://wafflesoftware.net/)
+	• a modified version of UKPrefsPanel by Uli Kusterer (http://www.zathras.de/)
+	• SGHotKeysLib by Justin Williams (https://github.com/agilebits/SGHotKeysLib)
+	• MJCloudKitUserDefaultsSync by Mark Jerde (https://github.com/MarkJerde/MJCloudKitUserDefaultsSync)
 
 Jumpcut is open source code built with open source code. Jumpcut incorporates the
 following libraries, used with gratitude:
-	• PTHotKey by Quentin Carnicelli (<http://rogueamoeba.com/>)
-	• ShortcutRecorder by Jesper et al. (<http://wafflesoftware.net/>)
-	• Sparkle by Andy Matuschak (<http://www.andymatuschak.org/>)
-	• a modified version of UKPrefsPanel by Uli Kusterer (<http://www.zathras.de/>) 
+	• PTHotKey by Quentin Carnicelli (http://rogueamoeba.com/)
+	• ShortcutRecorder by Jesper et al. (http://wafflesoftware.net/)
+	• Sparkle by Andy Matuschak (http://www.andymatuschak.org/)
+	• a modified version of UKPrefsPanel by Uli Kusterer (http://www.zathras.de/) 
 
-Additionally, much of the original code for Jumpcut was derived from Brett Simmons' TigerLaunch (<http://ranchero.com/tigerlaunch/>) and constant referral to the examples and discussion at CocoaDev.com.
+Additionally, much of the original code for Jumpcut was derived from Brett Simmons' TigerLaunch (http://ranchero.com/tigerlaunch/) and constant referral to the examples and discussion at CocoaDev.com.
 
-Jumpcut is subject to the MIT License. Source code and license details are available at its homepage, (<http://jumpcut.sourceforge.net>). Unless otherwise noted, Jumpcut is copyright © Steve Cook, 2002 – 2008.
+Jumpcut is subject to the MIT License. Source code and license details are available at its homepage, (http://jumpcut.sourceforge.net). Unless otherwise noted, Jumpcut is copyright © Steve Cook, 2002 – 2008.
 
 Thanks to Clare Bates Congdon, Joshua Davis, Brad Graham, David Jacobs, John Kenzie, Adam Rice, Finn Smith, Vera Tobin, and Andre Torrez for early and ongoing feedback, advice, and encouragement.
