@@ -21,6 +21,7 @@ import SwiftUI
 private enum PreferencesTab: String, CaseIterable, Identifiable {
     case general
     case hotkeys
+    case shortcuts
     case appearance
     case acknowledgements
 
@@ -32,6 +33,8 @@ private enum PreferencesTab: String, CaseIterable, Identifiable {
             return "General"
         case .hotkeys:
             return "Hotkeys"
+        case .shortcuts:
+            return "Shortcuts"
         case .appearance:
             return "Appearance"
         case .acknowledgements:
@@ -45,6 +48,8 @@ private enum PreferencesTab: String, CaseIterable, Identifiable {
             return "slider.horizontal.3"
         case .hotkeys:
             return "keyboard"
+        case .shortcuts:
+            return "command"
         case .appearance:
             return "paintbrush"
         case .acknowledgements:
@@ -59,6 +64,53 @@ private struct HotKeyValue: Equatable {
 
     static let empty = HotKeyValue(keyCode: -1, modifierFlags: 0)
 }
+
+private struct ShortcutReference: Identifiable {
+    let shortcut: String
+    let action: String
+
+    var id: String { "\(shortcut)-\(action)" }
+}
+
+private struct ShortcutReferenceSection: Identifiable {
+    let title: LocalizedStringKey
+    let entries: [ShortcutReference]
+
+    var id: String { String(describing: title) }
+}
+
+private let readmeShortcutSections: [ShortcutReferenceSection] = [
+    ShortcutReferenceSection(title: "Global", entries: [
+        ShortcutReference(shortcut: "Shift+Command+V", action: "Open clipboard history (bezel)"),
+        ShortcutReference(shortcut: "Shift+Command+B", action: "Open search window"),
+    ]),
+    ShortcutReferenceSection(title: "Bezel Navigation", entries: [
+        ShortcutReference(shortcut: "Up/Left Arrow or K", action: "Move to newer item"),
+        ShortcutReference(shortcut: "Down/Right Arrow or J", action: "Move to older item"),
+        ShortcutReference(shortcut: "Home", action: "Jump to most recent item"),
+        ShortcutReference(shortcut: "End", action: "Jump to oldest item"),
+        ShortcutReference(shortcut: "Page Up / Page Down", action: "Move 10 items forward/back"),
+        ShortcutReference(shortcut: "1-9, 0", action: "Jump to position (0 = 10th)"),
+        ShortcutReference(shortcut: "Scroll Wheel", action: "Navigate history"),
+    ]),
+    ShortcutReferenceSection(title: "Bezel Actions", entries: [
+        ShortcutReference(shortcut: "Return", action: "Paste selected item"),
+        ShortcutReference(shortcut: "Fn+Return", action: "Move item to top of history"),
+        ShortcutReference(shortcut: "Backspace/Delete", action: "Delete selected item"),
+        ShortcutReference(shortcut: "Escape", action: "Close without pasting"),
+        ShortcutReference(shortcut: "Double-Click", action: "Paste item"),
+        ShortcutReference(shortcut: "Command+,", action: "Open preferences"),
+        ShortcutReference(shortcut: "S", action: "Save item to Desktop"),
+        ShortcutReference(shortcut: "Shift+S", action: "Save to Desktop and delete"),
+        ShortcutReference(shortcut: "F", action: "Toggle favorites store"),
+        ShortcutReference(shortcut: "Shift+F", action: "Move item to favorites"),
+        ShortcutReference(shortcut: "Space", action: "Pin bezel open (sticky mode)"),
+        ShortcutReference(shortcut: "Right-Click", action: "Pin bezel open (sticky mode)"),
+    ]),
+    ShortcutReferenceSection(title: "Menu Bar", entries: [
+        ShortcutReference(shortcut: "Option+Click menu icon", action: "Toggle clipboard tracking on/off"),
+    ]),
+]
 
 private final class FlycutPreferencesBridge: ObservableObject {
     weak var delegate: FlycutPreferencesWindowControllerDelegate?
@@ -248,6 +300,8 @@ private struct PreferencesDetailContainer<Content: View>: View {
             return "Clipboard behavior and retention"
         case .hotkeys:
             return "Keyboard shortcuts and accessibility"
+        case .shortcuts:
+            return "Reference shortcuts from the README"
         case .appearance:
             return "Bezel and menu presentation"
         case .acknowledgements:
@@ -477,6 +531,50 @@ private struct HotkeyPreferencesView: View {
     }
 }
 
+private struct ShortcutReferenceRow: View {
+    let entry: ShortcutReference
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            Text(verbatim: entry.shortcut)
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 220, alignment: .leading)
+
+            Text(entry.action)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct ShortcutsPreferencesView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                PreferenceSection(titleKey: "Keyboard Shortcuts") {
+                    Text("Reference list copied from the project README. The two global shortcuts can be changed in the Hotkeys tab.")
+                        .foregroundStyle(.secondary)
+
+                    ForEach(readmeShortcutSections) { section in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(section.title)
+                                .font(.subheadline.weight(.semibold))
+
+                            ForEach(section.entries) { entry in
+                                ShortcutReferenceRow(entry: entry)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                    }
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .padding(20)
+        }
+    }
+}
+
 private struct AppearancePreferencesView: View {
     weak var controller: FlycutPreferencesWindowController?
     @AppStorage("bezelAlpha") private var bezelAlpha = 0.25
@@ -615,6 +713,10 @@ private struct PreferencesWindowContentView: View {
                 case .hotkeys:
                     PreferencesDetailContainer(tab: .hotkeys) {
                         HotkeyPreferencesView(controller: controller, bridge: bridge)
+                    }
+                case .shortcuts:
+                    PreferencesDetailContainer(tab: .shortcuts) {
+                        ShortcutsPreferencesView()
                     }
                 case .appearance:
                     PreferencesDetailContainer(tab: .appearance) {
