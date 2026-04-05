@@ -86,6 +86,8 @@ Build a universal Release app bundle into `dist` with:
 bash Scripts/package-app.sh
 ```
 
+The packaging script also applies an ad-hoc signature to the app bundle so local builds behave more consistently with macOS privacy permissions such as Accessibility.
+
 **Contributors:**
 Check the list of contributors [here](https://github.com/haad/Flycut/graphs/contributors)
 
