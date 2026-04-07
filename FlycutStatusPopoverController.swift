@@ -139,10 +139,10 @@ private struct FlycutStatusFooterButton: View {
 
                 Text(titleKey)
                     .font(.system(size: 12, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 18)
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 10)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34)
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
