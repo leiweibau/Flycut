@@ -56,6 +56,7 @@
 -(NSString*)getPasteFromStackPosition;
 -(NSString*)getPasteFromIndex:(int) position;
 -(FlycutClipping*)getClippingFromIndex:(int) position;
+-(bool)moveClippingAtStackPositionToTop;
 -(bool) saveFromStack;
 -(bool)clearItemAtStackPosition;
 -(void)clearList;

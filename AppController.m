@@ -62,6 +62,7 @@
 - (void)localizeMenuItem:(NSMenuItem *)item;
 - (void)localizeView:(NSView *)view;
 - (void)localizeWindow:(NSWindow *)window;
+- (BOOL)isOptionKeyPressedForEvent:(NSEvent *)event;
 - (NSArray<NSDictionary *> *)displayItemsMatchingSearch:(NSString *)search;
 - (NSImage *)previewImageForClipping:(FlycutClipping *)clipping size:(CGFloat)size;
 - (void)addClippingToPasteboard:(FlycutClipping *)clipping;
@@ -401,7 +402,7 @@
 -(void)menuWillOpen:(NSMenu *)menu
 {
     NSEvent *event = [NSApp currentEvent];
-    if([event modifierFlags] & NSEventModifierFlagOption) {
+    if ([self isOptionKeyPressedForEvent:event]) {
         [menu cancelTracking];
         bool disableStore = [self toggleMenuIconDisabled];
         if (!disableStore)
@@ -428,7 +429,7 @@
 -(void)toggleStatusPopover:(id)sender
 {
     NSEvent *event = [NSApp currentEvent];
-    if ([event modifierFlags] & NSEventModifierFlagOption) {
+    if ([self isOptionKeyPressedForEvent:event]) {
         bool disableStore = [self toggleMenuIconDisabled];
         if (!disableStore) {
             [pbCount release];
@@ -436,6 +437,7 @@
         }
         [flycutOperator setDisableStoreTo:disableStore];
         [self.statusPopoverController closePopover];
+        statusItem.button.state = NSControlStateValueOff;
         return;
     }
 
@@ -472,6 +474,16 @@
         statusItemImage = nil;
     }
     return false;
+}
+
+- (BOOL)isOptionKeyPressedForEvent:(NSEvent *)event
+{
+    NSEventModifierFlags eventFlags = [event modifierFlags];
+    if (eventFlags & NSEventModifierFlagOption)
+        return YES;
+
+    CGEventFlags currentFlags = CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState);
+    return (currentFlags & kCGEventFlagMaskAlternate) != 0;
 }
 
 - (void)prewarmStatusPopoverIfNeeded
@@ -948,12 +960,8 @@
 
 - (void)moveItemAtStackPositionToTopOfStack
 {
-	if ( [flycutOperator stackPositionIsInBounds] ) {
-		[self pasteIndexAndUpdate: [flycutOperator stackPosition]];
-		[self performSelector:@selector(hideApp) withObject:nil afterDelay:0.2];
-	} else {
-		[self performSelector:@selector(hideApp) withObject:nil afterDelay:0.2];
-	}
+	[flycutOperator moveClippingAtStackPositionToTop];
+	[self performSelector:@selector(hideApp) withObject:nil afterDelay:0.2];
 }
 
 - (void)pasteIndexAndUpdate:(int) position {

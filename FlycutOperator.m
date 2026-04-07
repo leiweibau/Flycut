@@ -358,6 +358,19 @@
 	return clipping;
 }
 
+- (bool)moveClippingAtStackPositionToTop
+{
+    if (![self stackPositionIsInBounds])
+        return NO;
+
+    if (stackPosition != 0)
+        [clippingStore clippingMoveToTop:stackPosition];
+
+    stackPosition = 0;
+    [self actionAfterListModification];
+    return YES;
+}
+
 -(NSString*)getClipFromCount:(int)indexInt
 {
 //    NSString *pbFullText;å

@@ -85,6 +85,8 @@
 "Bezel" = "Bezel";
 "Accessibility" = "Bedienungshilfen";
 "Application Shortcuts" = "Kurzbefehle innerhalb der Anwendung";
+"Shortcut" = "Kurzbefehl";
+"Action" = "Aktion";
 "Bezel Navigation" = "Navigation im Bezel";
 "Bezel Actions" = "Aktionen im Bezel";
 "Menu Bar" = "Menüleiste";

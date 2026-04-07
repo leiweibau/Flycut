@@ -85,6 +85,8 @@
 "Bezel" = "Bezel";
 "Accessibility" = "Accessibility";
 "Application Shortcuts" = "Application Shortcuts";
+"Shortcut" = "Shortcut";
+"Action" = "Action";
 "Bezel Navigation" = "Bezel Navigation";
 "Bezel Actions" = "Bezel Actions";
 "Menu Bar" = "Menu Bar";

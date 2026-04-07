@@ -138,12 +138,13 @@ private struct FlycutStatusFooterButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .frame(maxWidth: .infinity, minHeight: 18)
                 .padding(.vertical, 8)
-                .background(backgroundView)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .foregroundStyle(foregroundStyle)
+        .background(backgroundView)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onHover { hovered in
             self.hovered = hovered
         }

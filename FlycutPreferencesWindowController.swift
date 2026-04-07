@@ -520,6 +520,8 @@ private struct HotkeyPreferencesView: View {
                             Text(section.title)
                                 .font(.subheadline.weight(.semibold))
 
+                            ShortcutReferenceHeaderRow()
+
                             ForEach(section.entries) { entry in
                                 ShortcutReferenceRow(entry: entry)
                             }
@@ -532,6 +534,23 @@ private struct HotkeyPreferencesView: View {
             .frame(maxWidth: 760, alignment: .leading)
             .padding(20)
         }
+    }
+}
+
+private struct ShortcutReferenceHeaderRow: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            Text("Shortcut")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 220, alignment: .leading)
+
+            Text("Action")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.top, 2)
     }
 }
 
