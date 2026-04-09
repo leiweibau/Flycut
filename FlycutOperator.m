@@ -24,6 +24,8 @@
 	NSDateFormatter *dateFormatterForDirectory;
 }
 
+static const NSTimeInterval FlycutDeferredSaveDelay = 0.75;
+
 - (id)init
 {
 	[[NSUserDefaults standardUserDefaults] registerDefaults:[NSDictionary dictionaryWithObjectsAndKeys:
@@ -543,8 +545,8 @@
 -(void)actionAfterListModification
 {
 	if ( !inhibitSaveEngineAfterListModification
-		&& [[NSUserDefaults standardUserDefaults] integerForKey:@"savePreference"] >= 2 )
-		[self saveEngine];
+			&& [[NSUserDefaults standardUserDefaults] integerForKey:@"savePreference"] >= 2 )
+			[self scheduleDeferredSaveEngine];
 }
 
 -(int)jcListCount
@@ -1145,6 +1147,9 @@
 }
 
 -(void) saveEngine {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(runDeferredSaveEngine) object:nil];
+    pendingDeferredSave = NO;
+
 	// saveEngine saves to NSUserDefaults.  If there have been no modifications, just skip this to avoid busy activity for any observers.
 	if ( !([clippingStore modifiedSinceLastSaveStore]
 		   || [favoritesStore modifiedSinceLastSaveStore]) )
@@ -1163,11 +1168,33 @@
     [self saveStore:clippingStore toKey:@"jcList" onDict:saveDict];
     [self saveStore:favoritesStore toKey:@"favoritesList" onDict:saveDict];
 
-    [[NSUserDefaults standardUserDefaults] setObject:saveDict forKey:@"store"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+	[[NSUserDefaults standardUserDefaults] setObject:saveDict forKey:@"store"];
+	[[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (void)scheduleDeferredSaveEngine
+{
+    pendingDeferredSave = YES;
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(runDeferredSaveEngine) object:nil];
+    [self performSelector:@selector(runDeferredSaveEngine)
+               withObject:nil
+               afterDelay:FlycutDeferredSaveDelay
+                  inModes:@[NSRunLoopCommonModes]];
+}
+
+- (void)runDeferredSaveEngine
+{
+    if (!pendingDeferredSave)
+        return;
+
+    pendingDeferredSave = NO;
+    [self saveEngine];
 }
 
 - (void)applicationWillTerminate {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(runDeferredSaveEngine) object:nil];
+    pendingDeferredSave = NO;
+
 	if ( [[NSUserDefaults standardUserDefaults] integerForKey:@"savePreference"] >= 1 ) {
 		DLog(@"Saving on exit");
         [self saveEngine];

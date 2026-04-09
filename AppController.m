@@ -66,6 +66,9 @@
 - (NSArray<NSDictionary *> *)displayItemsMatchingSearch:(NSString *)search;
 - (NSImage *)previewImageForClipping:(FlycutClipping *)clipping size:(CGFloat)size;
 - (void)addClippingToPasteboard:(FlycutClipping *)clipping;
+- (BOOL)pasteResolvedStoreIndex:(int)storeIndex refreshUI:(BOOL)refreshUI;
+- (BOOL)pasteIndex:(int)position refreshUI:(BOOL)refreshUI;
+- (void)updateSearchResultsForSearch:(NSString *)search;
 - (void)toggleStatusPopover:(id)sender;
 - (void)presentSaveLocationPanelForAutoSave:(BOOL)autoSave;
 - (void)prewarmStatusPopoverIfNeeded;
@@ -964,7 +967,8 @@
 	[self performSelector:@selector(hideApp) withObject:nil afterDelay:0.2];
 }
 
-- (void)pasteIndexAndUpdate:(int) position {
+- (BOOL)pasteIndex:(int)position refreshUI:(BOOL)refreshUI
+{
     // If there is an active search, we need to map the menu index to the stack position.
     NSString* search = [searchBox stringValue];
     if ( nil != search && 0 != search.length )
@@ -973,13 +977,25 @@
         position = [mapping[position] intValue];
     }
 
-    FlycutClipping *clipping = [flycutOperator getClippingFromIndex:position];
-    NSString *content = [flycutOperator getPasteFromIndex: position];
+    return [self pasteResolvedStoreIndex:position refreshUI:refreshUI];
+}
+
+- (BOOL)pasteResolvedStoreIndex:(int)storeIndex refreshUI:(BOOL)refreshUI
+{
+    FlycutClipping *clipping = [flycutOperator getClippingFromIndex:storeIndex];
+    NSString *content = [flycutOperator getPasteFromIndex:storeIndex];
     if ( nil != clipping && (nil != content || [clipping isImage]) )
     {
         [self addClippingToPasteboard:clipping];
-        [self updateMenu];
+        if (refreshUI)
+            [self updateMenu];
+        return YES;
 	}
+    return NO;
+}
+
+- (void)pasteIndexAndUpdate:(int) position {
+    [self pasteIndex:position refreshUI:YES];
 }
 
 - (void)metaKeysReleased
@@ -1590,34 +1606,43 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 - (NSArray<NSDictionary *> *)displayItemsMatchingSearch:(NSString *)search
 {
     NSInteger howMany = [[NSUserDefaults standardUserDefaults] integerForKey:@"displayNum"];
-    NSArray *indexes = [flycutOperator previousIndexes:(int)howMany containing:search];
     NSMutableArray *items = [NSMutableArray array];
+    BOOL hasSearch = search.length > 0;
+    NSInteger totalCount = [flycutOperator jcListCount];
 
-    for (NSNumber *storeIndex in indexes) {
-        FlycutClipping *clipping = [flycutOperator getClippingFromIndex:[storeIndex intValue]];
+    for (NSInteger storeIndex = 0; storeIndex < totalCount && [items count] < howMany; storeIndex++) {
+        FlycutClipping *clipping = [flycutOperator getClippingFromIndex:(int)storeIndex];
         if (!clipping)
             continue;
 
         NSString *title = [clipping isImage] ? FCLocalizedString(@"Image") : [clipping displayString];
         NSString *localizedName = [clipping appLocalizedName] ?: @"";
+        if (hasSearch) {
+            NSString *contents = [clipping contents] ?: @"";
+            BOOL matches = ([title rangeOfString:search options:NSCaseInsensitiveSearch].location != NSNotFound)
+                || ([contents rangeOfString:search options:NSCaseInsensitiveSearch].location != NSNotFound)
+                || ([localizedName rangeOfString:search options:NSCaseInsensitiveSearch].location != NSNotFound);
+            if (!matches)
+                continue;
+        }
+
         NSString *dateString = @"";
         if ([clipping timestamp] > 0)
             dateString = [dateFormat stringFromDate:[NSDate dateWithTimeIntervalSince1970:[clipping timestamp]]] ?: @"";
         NSMutableDictionary *item = [NSMutableDictionary dictionaryWithObjectsAndKeys:
                                      title ?: @"", @"title",
-                                     storeIndex, @"storeIndex",
+                                     [NSNumber numberWithInteger:storeIndex], @"storeIndex",
                                      @([clipping isImage]), @"isImage",
                                      nil];
-        [item setObject:[clipping contents] ?: @"" forKey:@"rawContent"];
         if ([localizedName length] > 0)
             [item setObject:localizedName forKey:@"sourceName"];
         if ([dateString length] > 0)
             [item setObject:dateString forKey:@"dateText"];
 
         if ([clipping isImage]) {
-            NSImage *preview = [self previewImageForClipping:clipping size:30.0];
-            if (preview)
-                [item setObject:preview forKey:@"previewImage"];
+            NSData *previewData = [clipping imageData];
+            if (previewData)
+                [item setObject:previewData forKey:@"previewData"];
         }
 
         [items addObject:item];
@@ -1650,7 +1675,7 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 -(IBAction)processMenuClippingSelection:(id)sender
 {
 	int index = [[sender representedObject] intValue];
-	[self pasteIndexAndUpdate:index];
+	[self pasteIndex:index refreshUI:NO];
 
 	if ( [[NSUserDefaults standardUserDefaults] boolForKey:@"menuSelectionPastes"] ) {
 		[self performSelector:@selector(hideApp) withObject:nil];
@@ -1976,7 +2001,8 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 		[self buildSearchWindow];
 	}
 
-	[self updateSearchResults];
+    [self.swiftSearchWindowController resetSearch];
+	[self updateSearchResultsForSearch:nil];
 	[self.swiftSearchWindowController showAndFocus];
 	isSearchWindowDisplayed = YES;
 }
@@ -1994,7 +2020,12 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 
 - (void)updateSearchResults
 {
-	[self.swiftSearchWindowController updateItems:[self displayItemsMatchingSearch:nil]];
+	[self updateSearchResultsForSearch:nil];
+}
+
+- (void)updateSearchResultsForSearch:(NSString *)search
+{
+    [self.swiftSearchWindowController updateItems:[self displayItemsMatchingSearch:search]];
 }
 
 - (IBAction)searchWindowItemSelected:(id)sender
@@ -2079,8 +2110,14 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 - (void)searchWindowController:(FlycutSearchWindowController *)controller didSelectStoreIndex:(NSNumber *)storeIndex
 {
     (void)controller;
-    [self pasteIndexAndUpdate:[storeIndex intValue]];
+    [self pasteResolvedStoreIndex:[storeIndex intValue] refreshUI:NO];
     [self performSelector:@selector(fakeCommandV) withObject:nil afterDelay:0.3];
+}
+
+- (void)searchWindowController:(FlycutSearchWindowController *)controller searchTextDidChange:(NSString *)searchText
+{
+    (void)controller;
+    [self updateSearchResultsForSearch:(searchText.length > 0 ? searchText : nil)];
 }
 
 - (void)searchWindowControllerDidClose:(FlycutSearchWindowController *)controller
@@ -2182,12 +2219,18 @@ didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
 - (void)statusPopoverController:(FlycutStatusPopoverController *)controller didSelectStoreIndex:(NSNumber *)storeIndex
 {
     (void)controller;
-    [self pasteIndexAndUpdate:[storeIndex intValue]];
+    [self pasteResolvedStoreIndex:[storeIndex intValue] refreshUI:NO];
 
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"menuSelectionPastes"]) {
         [self performSelector:@selector(hideApp) withObject:nil];
         [self performSelector:@selector(fakeCommandV) withObject:nil afterDelay:0.3];
     }
+}
+
+- (void)statusPopoverController:(FlycutStatusPopoverController *)controller searchTextDidChange:(NSString *)searchText
+{
+    (void)controller;
+    [self updateMenuContaining:(searchText.length > 0 ? searchText : nil)];
 }
 
 - (void)statusPopoverControllerDidRequestClearAll:(FlycutStatusPopoverController *)controller

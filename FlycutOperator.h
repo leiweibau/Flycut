@@ -45,6 +45,7 @@
 
 	//Preferences
 	BOOL issuedRememberResizeWarning;
+    BOOL pendingDeferredSave;
 }
 
 // Basic functionality

@@ -1,8 +1,10 @@
 import AppKit
+import ImageIO
 import SwiftUI
 
 @objc public protocol FlycutStatusPopoverControllerDelegate: AnyObject {
     func statusPopoverController(_ controller: FlycutStatusPopoverController, didSelectStoreIndex storeIndex: NSNumber)
+    func statusPopoverController(_ controller: FlycutStatusPopoverController, searchTextDidChange searchText: String)
     func statusPopoverControllerDidRequestClearAll(_ controller: FlycutStatusPopoverController)
     func statusPopoverControllerDidRequestMergeAll(_ controller: FlycutStatusPopoverController)
     func statusPopoverControllerDidRequestPreferences(_ controller: FlycutStatusPopoverController)
@@ -15,26 +17,112 @@ private struct StatusClipItem: Identifiable, Equatable {
     let id: Int
     let storeIndex: Int
     let title: String
-    let rawContent: String
     let sourceName: String
     let dateText: String
     let isImage: Bool
-    let previewImage: NSImage?
+    let previewData: Data?
 
     init(dictionary: NSDictionary, index: Int) {
         self.storeIndex = (dictionary["storeIndex"] as? NSNumber)?.intValue ?? index
         self.id = self.storeIndex
         self.title = dictionary["title"] as? String ?? ""
-        self.rawContent = dictionary["rawContent"] as? String ?? ""
         self.sourceName = dictionary["sourceName"] as? String ?? ""
         self.dateText = dictionary["dateText"] as? String ?? ""
         self.isImage = (dictionary["isImage"] as? NSNumber)?.boolValue ?? false
-        if let image = dictionary["previewImage"] as? NSImage {
-            self.previewImage = image
-        } else if let data = dictionary["previewData"] as? Data {
-            self.previewImage = NSImage(data: data)
+        if let data = dictionary["previewData"] as? Data {
+            self.previewData = data
+        } else if let image = dictionary["previewImage"] as? NSImage {
+            self.previewData = image.tiffRepresentation
         } else {
-            self.previewImage = nil
+            self.previewData = nil
+        }
+    }
+}
+
+private final class FlycutThumbnailCache {
+    static let shared = NSCache<NSString, NSImage>()
+}
+
+private final class FlycutThumbnailLoader: ObservableObject {
+    @Published var image: NSImage?
+
+    private var requestedKey: NSString?
+
+    func load(previewData: Data?, cacheKey: NSString, size: CGFloat) {
+        requestedKey = cacheKey
+
+        guard let previewData, !previewData.isEmpty else {
+            image = nil
+            return
+        }
+
+        if let cachedImage = FlycutThumbnailCache.shared.object(forKey: cacheKey) {
+            image = cachedImage
+            return
+        }
+
+        image = nil
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            guard let cgImageSource = CGImageSourceCreateWithData(previewData as CFData, nil) else { return }
+
+            let options: [NSString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: Int(size * 2.0)
+            ]
+
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(cgImageSource, 0, options as CFDictionary) else { return }
+            let thumbnail = NSImage(cgImage: cgImage, size: NSSize(width: size, height: size))
+            FlycutThumbnailCache.shared.setObject(thumbnail, forKey: cacheKey)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.requestedKey == cacheKey else { return }
+                self.image = thumbnail
+            }
+        }
+    }
+}
+
+private struct FlycutStatusThumbnailView: View {
+    let previewData: Data?
+    let cacheKey: NSString
+    let size: CGFloat
+
+    @StateObject private var loader = FlycutThumbnailLoader()
+
+    var body: some View {
+        Group {
+            if let image = loader.image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.primary.opacity(0.06))
+                    Image(systemName: "photo")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+        )
+        .onAppear {
+            loader.load(previewData: previewData, cacheKey: cacheKey, size: size)
+        }
+        .onChange(of: cacheKey as String) { _ in
+            loader.load(previewData: previewData, cacheKey: cacheKey, size: size)
+        }
+        .onChange(of: previewData?.hashValue ?? 0) { _ in
+            loader.load(previewData: previewData, cacheKey: cacheKey, size: size)
         }
     }
 }
@@ -44,16 +132,6 @@ private final class FlycutStatusPopoverViewModel: ObservableObject {
     @Published var items: [StatusClipItem] = []
     @Published var preferredHeight: CGFloat = 560
     @Published var scrollResetToken = 0
-
-    var filteredItems: [StatusClipItem] {
-        guard !searchText.isEmpty else { return items }
-
-        return items.filter {
-            $0.title.localizedCaseInsensitiveContains(searchText) ||
-            $0.rawContent.localizedCaseInsensitiveContains(searchText) ||
-            $0.sourceName.localizedCaseInsensitiveContains(searchText)
-        }
-    }
 }
 
 private struct FlycutStatusClipRow: View {
@@ -65,17 +143,12 @@ private struct FlycutStatusClipRow: View {
     var body: some View {
         Button(action: activate) {
             HStack(spacing: 12) {
-                if item.isImage, let previewImage = item.previewImage {
-                    Image(nsImage: previewImage)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFill()
-                        .frame(width: 34, height: 34)
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
-                        )
+                if item.isImage {
+                    FlycutStatusThumbnailView(
+                        previewData: item.previewData,
+                        cacheKey: "\(item.id)-34" as NSString,
+                        size: 34
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -175,6 +248,7 @@ private struct FlycutStatusPopoverContentView: View {
     let preferences: () -> Void
     let about: () -> Void
     let quit: () -> Void
+    let searchChanged: (String) -> Void
 
     @FocusState private var searchFocused: Bool
 
@@ -198,13 +272,13 @@ private struct FlycutStatusPopoverContentView: View {
                             .frame(height: 0)
                             .id("top-anchor")
 
-                        if model.filteredItems.isEmpty {
+                        if model.items.isEmpty {
                             Text(LocalizedStringKey("Empty"))
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, minHeight: 220)
                         } else {
-                            ForEach(model.filteredItems) { item in
+                            ForEach(model.items) { item in
                                 FlycutStatusClipRow(item: item) {
                                     activate(item.storeIndex)
                                 }
@@ -246,6 +320,9 @@ private struct FlycutStatusPopoverContentView: View {
                 searchFocused = true
             }
         }
+        .onChange(of: model.searchText) { newValue in
+            searchChanged(newValue)
+        }
     }
 
     private func scrollToTop(using proxy: ScrollViewProxy) {
@@ -271,7 +348,8 @@ private struct FlycutStatusPopoverContentView: View {
                 mergeAll: {},
                 preferences: {},
                 about: {},
-                quit: {}
+                quit: {},
+                searchChanged: { _ in }
             )
         )
 
@@ -308,6 +386,10 @@ private struct FlycutStatusPopoverContentView: View {
                 guard let self else { return }
                 self.closePopover()
                 self.bridgeDelegate?.statusPopoverControllerDidRequestQuit(self)
+            },
+            searchChanged: { [weak self] searchText in
+                guard let self else { return }
+                self.bridgeDelegate?.statusPopoverController(self, searchTextDidChange: searchText)
             }
         )
 
